@@ -10,6 +10,9 @@ interface Game_Props {
   level: Rank
   selected_ids: Set<number>
   on_card_click: (id: number) => void
+  on_select_same_rank: (rank: number) => void
+  on_quick_select: (type: 'pair' | 'triple' | 'bomb' | 'clear') => void
+  on_suggest: () => void
   on_play: () => void
   on_pass: () => void
   table_cards: Card_Type[]
@@ -28,6 +31,9 @@ export function Game({
   level,
   selected_ids,
   on_card_click,
+  on_select_same_rank,
+  on_quick_select,
+  on_suggest,
   on_play,
   on_pass,
   table_cards,
@@ -70,11 +76,21 @@ export function Game({
         </div>
 
         <div style={mobile_styles.my_area}>
+          {/* Quick select buttons */}
+          <div style={mobile_styles.quick_select_row}>
+            <button onClick={() => on_quick_select('pair')} style={mobile_styles.quick_btn}>2x</button>
+            <button onClick={() => on_quick_select('triple')} style={mobile_styles.quick_btn}>3x</button>
+            <button onClick={() => on_quick_select('bomb')} style={mobile_styles.quick_btn_bomb}>Bomb</button>
+            <button onClick={on_suggest} style={mobile_styles.quick_btn_suggest}>Hint</button>
+            <button onClick={() => on_quick_select('clear')} style={mobile_styles.quick_btn_clear}>Clear</button>
+          </div>
+
           <Hand
             cards={hand}
             level={level}
             selected_ids={selected_ids}
             on_card_click={on_card_click}
+            on_select_same_rank={on_select_same_rank}
           />
 
           <div style={mobile_styles.actions}>
@@ -178,12 +194,22 @@ export function Game({
           </div>
 
           <div style={styles.my_area}>
-          <Hand
-            cards={hand}
-            level={level}
-            selected_ids={selected_ids}
-            on_card_click={on_card_click}
-          />
+            {/* Quick select buttons */}
+            <div style={styles.quick_select_row}>
+              <button onClick={() => on_quick_select('pair')} style={styles.quick_btn}>Pair</button>
+              <button onClick={() => on_quick_select('triple')} style={styles.quick_btn}>Triple</button>
+              <button onClick={() => on_quick_select('bomb')} style={styles.quick_btn_bomb}>Bomb</button>
+              <button onClick={on_suggest} style={styles.quick_btn_suggest}>Suggest</button>
+              <button onClick={() => on_quick_select('clear')} style={styles.quick_btn_clear}>Clear</button>
+            </div>
+
+            <Hand
+              cards={hand}
+              level={level}
+              selected_ids={selected_ids}
+              on_card_click={on_card_click}
+              on_select_same_rank={on_select_same_rank}
+            />
 
           <div style={styles.actions}>
             <motion.button
@@ -347,6 +373,15 @@ function get_relative_positions(my_seat: number) {
   }
 }
 
+const quick_btn_base: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 12,
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontWeight: 'bold',
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -370,6 +405,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  layout_toggle: {
+    padding: '6px 12px',
+    backgroundColor: '#4a5568',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 12,
   },
   team_scores: {
     color: '#fff',
@@ -418,6 +462,31 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: '2px solid #333',
     flexShrink: 0,
   },
+  quick_select_row: {
+    display: 'flex',
+    gap: 8,
+    marginBottom: 8,
+  },
+  quick_btn: {
+    ...quick_btn_base,
+    backgroundColor: '#2196f3',
+    color: '#fff',
+  },
+  quick_btn_bomb: {
+    ...quick_btn_base,
+    backgroundColor: '#ff5722',
+    color: '#fff',
+  },
+  quick_btn_suggest: {
+    ...quick_btn_base,
+    backgroundColor: '#9c27b0',
+    color: '#fff',
+  },
+  quick_btn_clear: {
+    ...quick_btn_base,
+    backgroundColor: '#607d8b',
+    color: '#fff',
+  },
   actions: {
     display: 'flex',
     gap: 12,
@@ -448,6 +517,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
 }
 
+const mobile_quick_btn_base: React.CSSProperties = {
+  padding: '4px 8px',
+  fontSize: 10,
+  border: 'none',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontWeight: 'bold',
+}
+
 const mobile_styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -470,6 +548,15 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     color: '#000',
     borderRadius: 6,
     fontWeight: 'bold',
+    fontSize: 12,
+  },
+  layout_toggle: {
+    padding: '4px 8px',
+    backgroundColor: '#4a5568',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
     fontSize: 12,
   },
   team_scores: {
@@ -509,6 +596,31 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     paddingBottom: 8,
     borderTop: '2px solid #333',
     flexShrink: 0,
+  },
+  quick_select_row: {
+    display: 'flex',
+    gap: 6,
+    marginBottom: 4,
+  },
+  quick_btn: {
+    ...mobile_quick_btn_base,
+    backgroundColor: '#2196f3',
+    color: '#fff',
+  },
+  quick_btn_bomb: {
+    ...mobile_quick_btn_base,
+    backgroundColor: '#ff5722',
+    color: '#fff',
+  },
+  quick_btn_suggest: {
+    ...mobile_quick_btn_base,
+    backgroundColor: '#9c27b0',
+    color: '#fff',
+  },
+  quick_btn_clear: {
+    ...mobile_quick_btn_base,
+    backgroundColor: '#607d8b',
+    color: '#fff',
   },
   actions: {
     display: 'flex',

@@ -9,6 +9,14 @@ import {
   Rank_Two,
   Message,
 } from './game/types'
+import {
+  find_same_rank,
+  select_pair,
+  select_triple,
+  select_bomb,
+  find_valid_plays,
+  detect_combo,
+} from './game/combos'
 
 interface Deal_Cards_Payload {
   cards: Card[]
@@ -173,6 +181,61 @@ export default function App() {
     })
   }, [])
 
+  const handle_select_same_rank = useCallback((rank: number) => {
+    set_hand((current_hand) => {
+      const same_rank_cards = find_same_rank(current_hand, rank)
+      set_selected_ids((prev) => {
+        const next = new Set(prev)
+        // Toggle: if all are selected, deselect all; otherwise select all
+        const all_selected = same_rank_cards.every(c => prev.has(c.Id))
+        if (all_selected) {
+          same_rank_cards.forEach(c => next.delete(c.Id))
+        } else {
+          same_rank_cards.forEach(c => next.add(c.Id))
+        }
+        return next
+      })
+      return current_hand
+    })
+  }, [])
+
+  const handle_quick_select = useCallback((type: 'pair' | 'triple' | 'bomb' | 'clear') => {
+    if (type === 'clear') {
+      set_selected_ids(new Set())
+      return
+    }
+
+    set_hand((current_hand) => {
+      let cards: Card[] | null = null
+      switch (type) {
+        case 'pair':
+          cards = select_pair(current_hand, level)
+          break
+        case 'triple':
+          cards = select_triple(current_hand, level)
+          break
+        case 'bomb':
+          cards = select_bomb(current_hand, level)
+          break
+      }
+      if (cards) {
+        set_selected_ids(new Set(cards.map(c => c.Id)))
+      }
+      return current_hand
+    })
+  }, [level])
+
+  const handle_suggest = useCallback(() => {
+    set_hand((current_hand) => {
+      const table_combo = table_cards.length > 0 ? detect_combo(table_cards, level) : null
+      const suggestions = find_valid_plays(current_hand, table_combo, level)
+      if (suggestions.length > 0) {
+        set_selected_ids(new Set(suggestions[0].map(c => c.Id)))
+      }
+      return current_hand
+    })
+  }, [table_cards, level])
+
   const handle_play = useCallback(() => {
     if (selected_ids.size === 0) return
 
@@ -218,6 +281,9 @@ export default function App() {
         level={level}
         selected_ids={selected_ids}
         on_card_click={handle_card_click}
+        on_select_same_rank={handle_select_same_rank}
+        on_quick_select={handle_quick_select}
+        on_suggest={handle_suggest}
         on_play={handle_play}
         on_pass={handle_pass}
         table_cards={table_cards}
