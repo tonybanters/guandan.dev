@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card as Card_Type, Rank } from '../game/types'
+import { Card as Card_Type, Rank, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades } from '../game/types'
 import { Card } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
 
@@ -9,7 +9,12 @@ interface Hand_Props {
   level: Rank
   selected_ids: Set<number>
   on_card_click: (id: number) => void
+  on_toggle_selection: (id: number) => void
   on_select_same_rank: (rank: number) => void
+  on_play: () => void
+  on_pass: () => void
+  is_my_turn: boolean
+  can_pass: boolean
 }
 
 interface Column {
@@ -18,23 +23,21 @@ interface Column {
   is_custom: boolean
 }
 
-export function Hand({ cards, level, selected_ids, on_card_click, on_select_same_rank }: Hand_Props) {
+export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_play, on_pass, is_my_turn, can_pass }: Hand_Props) {
   const is_mobile = use_is_mobile()
   const last_click = useRef<{ id: number; time: number } | null>(null)
   const [custom_columns, set_custom_columns] = useState<Map<string, number[]>>(new Map())
-  const [drag_card_id, set_drag_card_id] = useState<number | null>(null)
-  const [drop_target, set_drop_target] = useState<string | null>(null)
 
-  // Touch drag state
-  const touch_start_pos = useRef<{ x: number; y: number } | null>(null)
-  const is_touch_dragging = useRef(false)
-  const column_refs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const new_pile_ref = useRef<HTMLDivElement>(null)
+  // Swipe-to-select state
+  const [is_swiping, set_is_swiping] = useState(false)
+  const swipe_start = useRef<{ x: number; y: number } | null>(null)
+  const swiped_cards = useRef<Set<number>>(new Set())
+  const card_refs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   const handle_card_click = useCallback((card: Card_Type) => {
-    // Don't trigger click if we were dragging
-    if (is_touch_dragging.current) {
-      is_touch_dragging.current = false
+    // Don't trigger click if we were swiping
+    if (swiped_cards.current.size > 0) {
+      swiped_cards.current.clear()
       return
     }
 
@@ -57,14 +60,15 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_select_same
   // Filter to only cards that still exist in hand
   const valid_card_ids = new Set(cards.map(c => c.Id))
 
-  // Build columns: custom columns first, then auto-sorted remaining cards
+  // Build columns: auto-sorted cards first, then custom columns on right
   const columns: Column[] = []
+  const custom_cols: Column[] = []
 
-  // Add custom columns (filter out cards no longer in hand)
+  // Collect custom columns (filter out cards no longer in hand)
   custom_columns.forEach((card_ids, col_id) => {
     const valid_ids = card_ids.filter(id => valid_card_ids.has(id))
     if (valid_ids.length > 0) {
-      columns.push({ id: col_id, card_ids: valid_ids, is_custom: true })
+      custom_cols.push({ id: col_id, card_ids: valid_ids, is_custom: true })
     }
   })
 
@@ -97,52 +101,28 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_select_same
     })
   })
 
+  // Add custom columns at the end (right side)
+  columns.push(...custom_cols)
+
   // Card lookup
   const card_by_id = new Map(cards.map(c => [c.Id, c]))
 
-  const card_width = is_mobile ? 44 : 56
-  const card_height = is_mobile ? 62 : 78
-  const v_overlap = is_mobile ? 24 : 30
-  const h_gap = is_mobile ? 3 : 4
-  const selection_lift = 24
+  const card_width = is_mobile ? 36 : 56
+  const card_height = is_mobile ? 50 : 78
+  const v_overlap = is_mobile ? 18 : 30
+  const h_gap = is_mobile ? 2 : 3
 
-  // Find drop target from touch position
-  const find_drop_target = (x: number, y: number): string | null => {
-    // Check new pile zone
-    if (new_pile_ref.current) {
-      const rect = new_pile_ref.current.getBoundingClientRect()
-      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        return 'new'
-      }
-    }
+  // Move selected cards to a new custom pile
+  const handle_create_pile = () => {
+    if (selected_ids.size === 0) return
 
-    // Check custom columns
-    for (const [col_id, el] of column_refs.current) {
-      if (col_id.startsWith('custom-')) {
-        const rect = el.getBoundingClientRect()
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-          return col_id
-        }
-      }
-    }
-
-    return null
-  }
-
-  // Commit the drop
-  const commit_drop = (card_id: number, target: string | null) => {
-    if (target === null) {
-      set_drag_card_id(null)
-      set_drop_target(null)
-      return
-    }
-
+    const selected_array = Array.from(selected_ids)
     set_custom_columns(prev => {
       const next = new Map(prev)
 
-      // Remove from any existing custom column
+      // Remove selected cards from any existing custom columns
       next.forEach((ids, col_id) => {
-        const filtered = ids.filter(id => id !== card_id)
+        const filtered = ids.filter(id => !selected_ids.has(id))
         if (filtered.length === 0) {
           next.delete(col_id)
         } else {
@@ -150,73 +130,79 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_select_same
         }
       })
 
-      if (target === 'new') {
-        const new_col_id = `custom-${Date.now()}`
-        next.set(new_col_id, [card_id])
-      } else if (target.startsWith('custom-')) {
-        const existing = next.get(target) || []
-        next.set(target, [...existing, card_id])
-      }
+      // Create new column with selected cards
+      const new_col_id = `custom-${Date.now()}`
+      next.set(new_col_id, selected_array)
 
       return next
     })
-
-    set_drag_card_id(null)
-    set_drop_target(null)
   }
 
-  // Mouse drag handlers
-  const handle_drag_start = (card_id: number) => {
-    set_drag_card_id(card_id)
+  // Reset all custom arrangements
+  const handle_reset = () => {
+    set_custom_columns(new Map())
   }
 
-  const handle_drag_end = () => {
-    if (drag_card_id !== null && drop_target !== null) {
-      commit_drop(drag_card_id, drop_target)
-    } else {
-      set_drag_card_id(null)
-      set_drop_target(null)
+  // Select all cards of a given suit
+  const handle_select_suit = (suit: number) => {
+    const suit_cards = cards.filter(c => c.Suit === suit)
+    if (suit_cards.length === 0) return
+
+    // Toggle: if all are selected, deselect; otherwise select all
+    const all_selected = suit_cards.every(c => selected_ids.has(c.Id))
+    suit_cards.forEach(c => {
+      if (all_selected) {
+        on_card_click(c.Id) // deselect
+      } else if (!selected_ids.has(c.Id)) {
+        on_toggle_selection(c.Id) // select
+      }
+    })
+  }
+
+  // Swipe-to-select handlers
+  const find_card_at_point = (x: number, y: number): number | null => {
+    for (const [card_id, el] of card_refs.current) {
+      const rect = el.getBoundingClientRect()
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return card_id
+      }
+    }
+    return null
+  }
+
+  const handle_swipe_start = (e: React.MouseEvent | React.TouchEvent) => {
+    const point = 'touches' in e ? e.touches[0] : e
+    swipe_start.current = { x: point.clientX, y: point.clientY }
+    swiped_cards.current.clear()
+    set_is_swiping(false)
+  }
+
+  const handle_swipe_move = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!swipe_start.current) return
+
+    const point = 'touches' in e ? e.touches[0] : e
+    const dx = Math.abs(point.clientX - swipe_start.current.x)
+    const dy = Math.abs(point.clientY - swipe_start.current.y)
+
+    // Start swiping if moved more than 5px
+    if (dx > 5 || dy > 5) {
+      set_is_swiping(true)
+    }
+
+    if (is_swiping) {
+      const card_id = find_card_at_point(point.clientX, point.clientY)
+      if (card_id !== null && !swiped_cards.current.has(card_id)) {
+        swiped_cards.current.add(card_id)
+        on_toggle_selection(card_id)
+      }
     }
   }
 
-  const handle_drag_over_column = (col_id: string) => {
-    set_drop_target(col_id)
-  }
-
-  const handle_drag_leave = () => {
-    set_drop_target(null)
-  }
-
-  // Touch handlers
-  const handle_touch_start = (_card_id: number, e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    touch_start_pos.current = { x: touch.clientX, y: touch.clientY }
-    is_touch_dragging.current = false
-  }
-
-  const handle_touch_move = (card_id: number, e: React.TouchEvent) => {
-    if (!touch_start_pos.current) return
-
-    const touch = e.touches[0]
-    const dx = Math.abs(touch.clientX - touch_start_pos.current.x)
-    const dy = Math.abs(touch.clientY - touch_start_pos.current.y)
-
-    // Start dragging if moved more than 10px
-    if (dx > 10 || dy > 10) {
-      is_touch_dragging.current = true
-      set_drag_card_id(card_id)
-
-      const target = find_drop_target(touch.clientX, touch.clientY)
-      set_drop_target(target)
-    }
-  }
-
-  const handle_touch_end = (_card_id: number) => {
-    if (is_touch_dragging.current && drag_card_id !== null) {
-      commit_drop(drag_card_id, drop_target)
-    }
-    touch_start_pos.current = null
-    // Don't reset is_touch_dragging here - let click handler check it
+  const handle_swipe_end = () => {
+    swipe_start.current = null
+    set_is_swiping(false)
+    // Don't clear swiped_cards here - let click handler check it
+    setTimeout(() => swiped_cards.current.clear(), 50)
   }
 
   // Double-tap on custom column to dissolve it
@@ -231,120 +217,198 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_select_same
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        padding: is_mobile ? '4px 8px' : '8px 16px',
-        paddingTop: selection_lift + (is_mobile ? 4 : 8),
-        overflowX: 'auto',
-        overflowY: 'visible',
-        WebkitOverflowScrolling: 'touch',
-        width: '100%',
-      }}
-    >
-      <div style={{ display: 'flex', gap: h_gap, alignItems: 'flex-start' }}>
-        {/* New pile drop zone - always visible */}
-        <div
-          ref={new_pile_ref}
-          onDragOver={(e) => { e.preventDefault(); set_drop_target('new') }}
-          onDragLeave={handle_drag_leave}
-          onDrop={handle_drag_end}
-          style={{
-            width: card_width,
-            height: card_height,
-            border: `2px dashed ${drop_target === 'new' ? '#4caf50' : drag_card_id !== null ? '#888' : '#444'}`,
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: drop_target === 'new' ? '#4caf50' : drag_card_id !== null ? '#888' : '#555',
-            fontSize: is_mobile ? 18 : 24,
-            backgroundColor: drop_target === 'new' ? 'rgba(76,175,80,0.15)' : 'transparent',
-            opacity: drag_card_id !== null ? 1 : 0.4,
-            transition: 'all 0.15s ease',
-            flexShrink: 0,
-          }}
-        >
-          +
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+      {/* Cards area with swipe detection */}
+      <div
+        onMouseDown={handle_swipe_start}
+        onMouseMove={handle_swipe_move}
+        onMouseUp={handle_swipe_end}
+        onMouseLeave={handle_swipe_end}
+        onTouchStart={handle_swipe_start}
+        onTouchMove={handle_swipe_move}
+        onTouchEnd={handle_swipe_end}
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          padding: is_mobile ? '4px 8px' : '8px 16px',
+          overflowX: 'auto',
+          overflowY: 'visible',
+          WebkitOverflowScrolling: 'touch',
+          width: '100%',
+          cursor: is_swiping ? 'crosshair' : 'default',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', gap: h_gap, alignItems: 'flex-end' }}>
+          {columns.map((col, col_idx) => {
+            const col_cards = col.card_ids.map(id => card_by_id.get(id)!).filter(Boolean)
+            const col_height = card_height + (col_cards.length - 1) * v_overlap
+
+            return (
+              <div
+                key={col.id}
+                onDoubleClick={() => handle_column_double_click(col.id)}
+                style={{
+                  position: 'relative',
+                  width: card_width,
+                  height: col_height,
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              >
+                <AnimatePresence>
+                  {col_cards.map((card, card_idx) => {
+                    // First card (idx 0) = bottom position, FRONT (highest z-index)
+                    // Last card = top position, BACK (lowest z-index, only top peeks out)
+                    const from_bottom = card_idx
+
+                    return (
+                      <motion.div
+                        key={card.Id}
+                        ref={(el) => { if (el) card_refs.current.set(card.Id, el) }}
+                        initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.8 }}
+                        transition={{ delay: (col_idx * 0.3 + card_idx) * 0.01 }}
+                        style={{
+                          position: 'absolute',
+                          bottom: from_bottom * v_overlap,
+                          left: 0,
+                          zIndex: col_cards.length - card_idx,
+                          cursor: 'pointer',
+                          touchAction: 'none',
+                        }}
+                      >
+                        <Card
+                          card={card}
+                          level={level}
+                          selected={selected_ids.has(card.Id)}
+                          on_click={() => handle_card_click(card)}
+                          size="small"
+                        />
+                      </motion.div>
+                    )
+                  })}
+                </AnimatePresence>
+              </div>
+            )
+          })}
         </div>
+      </div>
 
-        {columns.map((col, col_idx) => {
-          const col_cards = col.card_ids.map(id => card_by_id.get(id)!).filter(Boolean)
-          const col_height = card_height + (col_cards.length - 1) * v_overlap
-
-          return (
-            <div
-              key={col.id}
-              ref={(el) => { if (el) column_refs.current.set(col.id, el) }}
-              onDragOver={(e) => { e.preventDefault(); if (col.is_custom) handle_drag_over_column(col.id) }}
-              onDragLeave={handle_drag_leave}
-              onDrop={handle_drag_end}
-              onDoubleClick={() => handle_column_double_click(col.id)}
+      {/* Suit filter buttons + action buttons */}
+      <div style={{
+        display: 'flex',
+        gap: is_mobile ? 6 : 10,
+        marginTop: is_mobile ? 4 : 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}>
+        {/* Suit buttons */}
+        <div style={{ display: 'flex', gap: is_mobile ? 4 : 6 }}>
+          {[
+            { suit: Suit_Spades, symbol: '♠', color: '#000' },
+            { suit: Suit_Hearts, symbol: '♥', color: '#dc3545' },
+            { suit: Suit_Clubs, symbol: '♣', color: '#000' },
+            { suit: Suit_Diamonds, symbol: '♦', color: '#dc3545' },
+          ].map(({ suit, symbol, color }) => (
+            <button
+              key={suit}
+              onClick={() => handle_select_suit(suit)}
               style={{
-                position: 'relative',
-                width: card_width,
-                height: col_height,
-                borderLeft: col.is_custom ? '2px solid #9c27b0' : 'none',
-                paddingLeft: col.is_custom ? 2 : 0,
-                backgroundColor: drop_target === col.id ? 'rgba(156,39,176,0.15)' : 'transparent',
-                borderRadius: 4,
-                flexShrink: 0,
+                width: is_mobile ? 28 : 34,
+                height: is_mobile ? 28 : 34,
+                fontSize: is_mobile ? 16 : 20,
+                backgroundColor: '#fff',
+                color: color,
+                border: '1px solid #ccc',
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {col.is_custom && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: -14,
-                    left: 0,
-                    fontSize: 8,
-                    color: '#9c27b0',
-                  }}
-                >
-                  ✦
-                </div>
-              )}
-              <AnimatePresence>
-                {col_cards.map((card, card_idx) => (
-                  <motion.div
-                    key={card.Id}
-                    draggable
-                    onDragStart={() => handle_drag_start(card.Id)}
-                    onDragEnd={handle_drag_end}
-                    onTouchStart={(e) => handle_touch_start(card.Id, e)}
-                    onTouchMove={(e) => handle_touch_move(card.Id, e)}
-                    onTouchEnd={() => handle_touch_end(card.Id)}
-                    initial={{ opacity: 0, x: 20, scale: 0.8 }}
-                    animate={{
-                      opacity: drag_card_id === card.Id ? 0.5 : 1,
-                      x: 0,
-                      scale: 1
-                    }}
-                    exit={{ opacity: 0, x: -20, scale: 0.8 }}
-                    transition={{ delay: (col_idx * 0.3 + card_idx) * 0.01 }}
-                    style={{
-                      position: 'absolute',
-                      top: card_idx * v_overlap,
-                      left: 0,
-                      zIndex: card_idx,
-                      cursor: 'grab',
-                      touchAction: 'none',
-                    }}
-                  >
-                    <Card
-                      card={card}
-                      level={level}
-                      selected={selected_ids.has(card.Id)}
-                      on_click={() => handle_card_click(card)}
-                      size="small"
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )
-        })}
+              {symbol}
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />
+
+        {/* Action buttons */}
+        <button
+          onClick={handle_create_pile}
+          disabled={selected_ids.size === 0}
+          style={{
+            padding: is_mobile ? '6px 10px' : '8px 14px',
+            fontSize: is_mobile ? 11 : 13,
+            backgroundColor: selected_ids.size > 0 ? '#9c27b0' : '#444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: selected_ids.size > 0 ? 'pointer' : 'default',
+            opacity: selected_ids.size > 0 ? 1 : 0.5,
+          }}
+        >
+          New Pile
+        </button>
+        <button
+          onClick={handle_reset}
+          disabled={custom_columns.size === 0}
+          style={{
+            padding: is_mobile ? '6px 10px' : '8px 14px',
+            fontSize: is_mobile ? 11 : 13,
+            backgroundColor: custom_columns.size > 0 ? '#607d8b' : '#444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: custom_columns.size > 0 ? 'pointer' : 'default',
+            opacity: custom_columns.size > 0 ? 1 : 0.5,
+          }}
+        >
+          Reset
+        </button>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />
+
+        {/* Play/Pass buttons */}
+        <button
+          onClick={on_pass}
+          disabled={!is_my_turn || !can_pass || cards.length === 0}
+          style={{
+            padding: is_mobile ? '6px 12px' : '8px 16px',
+            fontSize: is_mobile ? 12 : 14,
+            backgroundColor: is_my_turn && can_pass && cards.length > 0 ? '#dc3545' : '#444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: is_my_turn && can_pass && cards.length > 0 ? 'pointer' : 'default',
+            opacity: is_my_turn && can_pass && cards.length > 0 ? 1 : 0.5,
+          }}
+        >
+          Pass
+        </button>
+        <button
+          onClick={on_play}
+          disabled={!is_my_turn || selected_ids.size === 0 || cards.length === 0}
+          style={{
+            padding: is_mobile ? '6px 16px' : '8px 24px',
+            fontSize: is_mobile ? 13 : 15,
+            fontWeight: 'bold',
+            backgroundColor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? '#28a745' : '#444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 'pointer' : 'default',
+            opacity: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 1 : 0.5,
+          }}
+        >
+          Play
+        </button>
       </div>
     </div>
   )

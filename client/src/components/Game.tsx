@@ -11,8 +11,6 @@ interface Game_Props {
   selected_ids: Set<number>
   on_card_click: (id: number) => void
   on_select_same_rank: (rank: number) => void
-  on_quick_select: (type: 'pair' | 'triple' | 'bomb' | 'clear') => void
-  on_suggest: () => void
   on_play: () => void
   on_pass: () => void
   table_cards: Card_Type[]
@@ -32,8 +30,6 @@ export function Game({
   selected_ids,
   on_card_click,
   on_select_same_rank,
-  on_quick_select,
-  on_suggest,
   on_play,
   on_pass,
   table_cards,
@@ -76,47 +72,18 @@ export function Game({
         </div>
 
         <div style={mobile_styles.my_area}>
-          {/* Quick select buttons */}
-          <div style={mobile_styles.quick_select_row}>
-            <button onClick={() => on_quick_select('pair')} style={mobile_styles.quick_btn}>2x</button>
-            <button onClick={() => on_quick_select('triple')} style={mobile_styles.quick_btn}>3x</button>
-            <button onClick={() => on_quick_select('bomb')} style={mobile_styles.quick_btn_bomb}>Bomb</button>
-            <button onClick={on_suggest} style={mobile_styles.quick_btn_suggest}>Hint</button>
-            <button onClick={() => on_quick_select('clear')} style={mobile_styles.quick_btn_clear}>Clear</button>
-          </div>
-
           <Hand
             cards={hand}
             level={level}
             selected_ids={selected_ids}
             on_card_click={on_card_click}
+            on_toggle_selection={on_card_click}
             on_select_same_rank={on_select_same_rank}
+            on_play={on_play}
+            on_pass={on_pass}
+            is_my_turn={is_my_turn}
+            can_pass={can_pass}
           />
-
-          <div style={mobile_styles.actions}>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={on_play}
-              disabled={!is_my_turn || selected_ids.size === 0 || hand.length === 0}
-              style={{
-                ...mobile_styles.action_button,
-                backgroundColor: is_my_turn && selected_ids.size > 0 && hand.length > 0 ? '#28a745' : '#444',
-              }}
-            >
-              Play
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={on_pass}
-              disabled={!is_my_turn || !can_pass || hand.length === 0}
-              style={{
-                ...mobile_styles.action_button,
-                backgroundColor: is_my_turn && can_pass && hand.length > 0 ? '#dc3545' : '#444',
-              }}
-            >
-              Pass
-            </motion.button>
-          </div>
 
           {is_my_turn && hand.length > 0 && (
             <motion.div
@@ -172,7 +139,6 @@ export function Game({
                 is_turn={current_turn === relative_positions.left}
                 just_played={last_play_seat === relative_positions.left}
                 seat={relative_positions.left}
-                vertical
                 name={players_map[relative_positions.left]}
               />
             </div>
@@ -182,61 +148,29 @@ export function Game({
             </div>
 
             <div style={styles.opponent_side}>
-            <Opponent_Hand
-              count={player_card_counts[relative_positions.right]}
-              is_turn={current_turn === relative_positions.right}
-              just_played={last_play_seat === relative_positions.right}
-              seat={relative_positions.right}
-              vertical
-              name={players_map[relative_positions.right]}
-            />
-          </div>
+              <Opponent_Hand
+                count={player_card_counts[relative_positions.right]}
+                is_turn={current_turn === relative_positions.right}
+                just_played={last_play_seat === relative_positions.right}
+                seat={relative_positions.right}
+                name={players_map[relative_positions.right]}
+              />
+            </div>
           </div>
 
           <div style={styles.my_area}>
-            {/* Quick select buttons */}
-            <div style={styles.quick_select_row}>
-              <button onClick={() => on_quick_select('pair')} style={styles.quick_btn}>Pair</button>
-              <button onClick={() => on_quick_select('triple')} style={styles.quick_btn}>Triple</button>
-              <button onClick={() => on_quick_select('bomb')} style={styles.quick_btn_bomb}>Bomb</button>
-              <button onClick={on_suggest} style={styles.quick_btn_suggest}>Suggest</button>
-              <button onClick={() => on_quick_select('clear')} style={styles.quick_btn_clear}>Clear</button>
-            </div>
-
             <Hand
               cards={hand}
               level={level}
               selected_ids={selected_ids}
               on_card_click={on_card_click}
+              on_toggle_selection={on_card_click}
               on_select_same_rank={on_select_same_rank}
+              on_play={on_play}
+              on_pass={on_pass}
+              is_my_turn={is_my_turn}
+              can_pass={can_pass}
             />
-
-          <div style={styles.actions}>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={on_play}
-              disabled={!is_my_turn || selected_ids.size === 0 || hand.length === 0}
-              style={{
-                ...styles.action_button,
-                backgroundColor: is_my_turn && selected_ids.size > 0 && hand.length > 0 ? '#28a745' : '#444',
-              }}
-            >
-              Play
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={on_pass}
-              disabled={!is_my_turn || !can_pass || hand.length === 0}
-              style={{
-                ...styles.action_button,
-                backgroundColor: is_my_turn && can_pass && hand.length > 0 ? '#dc3545' : '#444',
-              }}
-            >
-              Pass
-            </motion.button>
-          </div>
 
           {is_my_turn && hand.length > 0 && (
             <motion.div
@@ -307,14 +241,10 @@ interface Opponent_Hand_Props {
   is_turn: boolean
   just_played?: boolean
   seat: number
-  vertical?: boolean
   name?: string
 }
 
-function Opponent_Hand({ count, is_turn, just_played, seat, vertical, name }: Opponent_Hand_Props) {
-  const display_count = Math.min(count, 10)
-  const overlap = vertical ? 15 : 20
-
+function Opponent_Hand({ count, is_turn, just_played, seat, name }: Opponent_Hand_Props) {
   const get_highlight_style = () => {
     if (just_played) return { backgroundColor: 'rgba(76, 175, 80, 0.3)', border: '2px solid #4caf50' }
     if (is_turn) return { backgroundColor: 'rgba(255,193,7,0.2)', border: '2px solid #ffc107' }
@@ -325,41 +255,38 @@ function Opponent_Hand({ count, is_turn, just_played, seat, vertical, name }: Op
     <div
       style={{
         display: 'flex',
-        flexDirection: vertical ? 'column' : 'row',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: 8,
+        gap: 4,
         padding: 8,
         borderRadius: 8,
         transition: 'all 0.2s ease',
         ...get_highlight_style(),
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: vertical ? 'column' : 'row',
-          position: 'relative',
-          width: vertical ? 50 : 50 + (display_count - 1) * overlap,
-          height: vertical ? 70 + (display_count - 1) * overlap : 70,
-        }}
-      >
-        {Array.from({ length: display_count }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              left: vertical ? 0 : i * overlap,
-              top: vertical ? i * overlap : 0,
-              transform: 'scale(0.7)',
-              transformOrigin: 'top left',
-            }}
-          >
-            <Card_Back />
-          </div>
-        ))}
+      <div style={{ position: 'relative' }}>
+        <Card_Back size="small" />
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            color: '#fff',
+            fontWeight: 'bold',
+            fontSize: 16,
+            padding: '4px 8px',
+            borderRadius: 4,
+            minWidth: 24,
+            textAlign: 'center',
+          }}
+        >
+          {count}
+        </div>
       </div>
-      <div style={{ color: '#fff', fontSize: 12 }}>
-        {name || `Seat ${seat + 1}`}: {count}
+      <div style={{ color: '#fff', fontSize: 11 }}>
+        {name || `P${seat + 1}`}
       </div>
     </div>
   )
@@ -371,15 +298,6 @@ function get_relative_positions(my_seat: number) {
     left: (my_seat + 1) % 4,
     right: (my_seat + 3) % 4,
   }
-}
-
-const quick_btn_base: React.CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  border: 'none',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontWeight: 'bold',
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -405,15 +323,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     fontWeight: 'bold',
     fontSize: 14,
-  },
-  layout_toggle: {
-    padding: '6px 12px',
-    backgroundColor: '#4a5568',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: 12,
   },
   team_scores: {
     color: '#fff',
@@ -462,44 +371,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: '2px solid #333',
     flexShrink: 0,
   },
-  quick_select_row: {
-    display: 'flex',
-    gap: 8,
-    marginBottom: 8,
-  },
-  quick_btn: {
-    ...quick_btn_base,
-    backgroundColor: '#2196f3',
-    color: '#fff',
-  },
-  quick_btn_bomb: {
-    ...quick_btn_base,
-    backgroundColor: '#ff5722',
-    color: '#fff',
-  },
-  quick_btn_suggest: {
-    ...quick_btn_base,
-    backgroundColor: '#9c27b0',
-    color: '#fff',
-  },
-  quick_btn_clear: {
-    ...quick_btn_base,
-    backgroundColor: '#607d8b',
-    color: '#fff',
-  },
-  actions: {
-    display: 'flex',
-    gap: 12,
-    marginTop: 8,
-  },
-  action_button: {
-    padding: '10px 24px',
-    fontSize: 14,
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    cursor: 'pointer',
-  },
   turn_indicator: {
     marginTop: 8,
     padding: '6px 12px',
@@ -515,15 +386,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     minHeight: 0,
   },
-}
-
-const mobile_quick_btn_base: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 10,
-  border: 'none',
-  borderRadius: 4,
-  cursor: 'pointer',
-  fontWeight: 'bold',
 }
 
 const mobile_styles: Record<string, React.CSSProperties> = {
@@ -548,15 +410,6 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     color: '#000',
     borderRadius: 6,
     fontWeight: 'bold',
-    fontSize: 12,
-  },
-  layout_toggle: {
-    padding: '4px 8px',
-    backgroundColor: '#4a5568',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 4,
-    cursor: 'pointer',
     fontSize: 12,
   },
   team_scores: {
@@ -596,44 +449,6 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     paddingBottom: 8,
     borderTop: '2px solid #333',
     flexShrink: 0,
-  },
-  quick_select_row: {
-    display: 'flex',
-    gap: 6,
-    marginBottom: 4,
-  },
-  quick_btn: {
-    ...mobile_quick_btn_base,
-    backgroundColor: '#2196f3',
-    color: '#fff',
-  },
-  quick_btn_bomb: {
-    ...mobile_quick_btn_base,
-    backgroundColor: '#ff5722',
-    color: '#fff',
-  },
-  quick_btn_suggest: {
-    ...mobile_quick_btn_base,
-    backgroundColor: '#9c27b0',
-    color: '#fff',
-  },
-  quick_btn_clear: {
-    ...mobile_quick_btn_base,
-    backgroundColor: '#607d8b',
-    color: '#fff',
-  },
-  actions: {
-    display: 'flex',
-    gap: 16,
-    marginTop: 4,
-  },
-  action_button: {
-    padding: '10px 28px',
-    fontSize: 14,
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    cursor: 'pointer',
   },
   turn_indicator: {
     marginTop: 6,
