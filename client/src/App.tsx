@@ -64,6 +64,8 @@ export default function App() {
   const [error, set_error] = useState<string | null>(null)
   const [players_map, set_players_map] = useState<Record<number, string>>({})
   const [last_play_seat, set_last_play_seat] = useState<number | null>(null)
+  const [player_plays, set_player_plays] = useState<Record<number, { cards: Card[], is_pass: boolean }>>({})
+  const [leading_seat, set_leading_seat] = useState<number | null>(null)
 
   useEffect(() => {
     const unsub_room_state = on('room_state', (msg: Message) => {
@@ -92,12 +94,19 @@ export default function App() {
       set_combo_type('')
       set_selected_ids(new Set())
       set_player_card_counts([27, 27, 27, 27])
+      set_player_plays({})
+      set_leading_seat(null)
     })
 
     const unsub_turn = on('turn', (msg: Message) => {
       const payload = msg.payload as Turn_Payload
       set_current_turn(payload.seat)
       set_can_pass(payload.can_pass)
+      // When can_pass is false, this player has control (new trick starting)
+      if (!payload.can_pass) {
+        set_player_plays({})
+        set_leading_seat(null)
+      }
     })
 
     const unsub_play_made = on('play_made', (msg: Message) => {
@@ -106,9 +115,16 @@ export default function App() {
       set_last_play_seat(payload.seat)
       setTimeout(() => set_last_play_seat(null), 800)
 
+      // Track this player's play
+      set_player_plays(prev => ({
+        ...prev,
+        [payload.seat]: { cards: payload.cards, is_pass: payload.is_pass }
+      }))
+
       if (!payload.is_pass) {
         set_table_cards(payload.cards)
         set_combo_type(payload.combo_type)
+        set_leading_seat(payload.seat)
         set_player_card_counts((prev) => {
           const next = [...prev]
           next[payload.seat] -= payload.cards.length
@@ -251,6 +267,8 @@ export default function App() {
         team_levels={team_levels}
         players_map={players_map}
         last_play_seat={last_play_seat}
+        player_plays={player_plays}
+        leading_seat={leading_seat}
       />
       {error && <div style={styles.error}>{error}</div>}
     </>

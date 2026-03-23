@@ -13,8 +13,8 @@ interface Card_Props {
 }
 
 const SIZE_CONFIG = {
-    small: { width: 36, height: 50, rank_font: 13, suit_font: 11 },
-    normal: { width: 56, height: 78, rank_font: 20, suit_font: 18 },
+    small: { width: 48, height: 67, rank_font: 15, suit_font: 13 },
+    normal: { width: 60, height: 84, rank_font: 22, suit_font: 20 },
 }
 
 export function Card({ card, level, selected, on_click, size = 'normal' }: Card_Props) {

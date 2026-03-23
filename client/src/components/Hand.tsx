@@ -107,10 +107,10 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
   // Card lookup
   const card_by_id = new Map(cards.map(c => [c.Id, c]))
 
-  const card_width = is_mobile ? 36 : 56
-  const card_height = is_mobile ? 50 : 78
-  const v_overlap = is_mobile ? 18 : 30
-  const h_gap = is_mobile ? 2 : 3
+  const card_width = is_mobile ? 48 : 60
+  const card_height = is_mobile ? 67 : 84
+  const v_overlap = is_mobile ? 18 : 28
+  const h_gap = is_mobile ? 3 : 4
 
   // Move selected cards to a new custom pile
   const handle_create_pile = () => {
@@ -284,7 +284,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                           level={level}
                           selected={selected_ids.has(card.Id)}
                           on_click={() => handle_card_click(card)}
-                          size="small"
+                          size={is_mobile ? "small" : "normal"}
                         />
                       </motion.div>
                     )
@@ -299,14 +299,28 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
       {/* Suit filter buttons + action buttons */}
       <div style={{
         display: 'flex',
-        gap: is_mobile ? 6 : 10,
-        marginTop: is_mobile ? 4 : 8,
+        gap: is_mobile ? 5 : 10,
+        marginTop: is_mobile ? 3 : 8,
         justifyContent: 'center',
         alignItems: 'center',
         flexWrap: 'wrap',
       }}>
+        {/* Turn indicator - mobile only, in the row */}
+        {is_mobile && is_my_turn && cards.length > 0 && (
+          <div style={{
+            padding: '4px 10px',
+            backgroundColor: '#ffc107',
+            color: '#000',
+            borderRadius: 4,
+            fontWeight: 'bold',
+            fontSize: 11,
+          }}>
+            Your turn
+          </div>
+        )}
+
         {/* Suit buttons */}
-        <div style={{ display: 'flex', gap: is_mobile ? 4 : 6 }}>
+        <div style={{ display: 'flex', gap: is_mobile ? 3 : 6 }}>
           {[
             { suit: Suit_Spades, symbol: '♠', color: '#000' },
             { suit: Suit_Hearts, symbol: '♥', color: '#dc3545' },
@@ -317,17 +331,18 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
               key={suit}
               onClick={() => handle_select_suit(suit)}
               style={{
-                width: is_mobile ? 28 : 34,
-                height: is_mobile ? 28 : 34,
-                fontSize: is_mobile ? 16 : 20,
+                width: is_mobile ? 26 : 34,
+                height: is_mobile ? 26 : 34,
+                fontSize: is_mobile ? 14 : 20,
                 backgroundColor: '#fff',
                 color: color,
                 border: '1px solid #ccc',
-                borderRadius: 6,
+                borderRadius: 4,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                padding: 0,
               }}
             >
               {symbol}
@@ -343,28 +358,28 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           onClick={handle_create_pile}
           disabled={selected_ids.size === 0}
           style={{
-            padding: is_mobile ? '6px 10px' : '8px 14px',
+            padding: is_mobile ? '4px 8px' : '8px 14px',
             fontSize: is_mobile ? 11 : 13,
             backgroundColor: selected_ids.size > 0 ? '#9c27b0' : '#444',
             color: '#fff',
             border: 'none',
-            borderRadius: 6,
+            borderRadius: 4,
             cursor: selected_ids.size > 0 ? 'pointer' : 'default',
             opacity: selected_ids.size > 0 ? 1 : 0.5,
           }}
         >
-          New Pile
+          Pile
         </button>
         <button
           onClick={handle_reset}
           disabled={custom_columns.size === 0}
           style={{
-            padding: is_mobile ? '6px 10px' : '8px 14px',
+            padding: is_mobile ? '4px 8px' : '8px 14px',
             fontSize: is_mobile ? 11 : 13,
             backgroundColor: custom_columns.size > 0 ? '#607d8b' : '#444',
             color: '#fff',
             border: 'none',
-            borderRadius: 6,
+            borderRadius: 4,
             cursor: custom_columns.size > 0 ? 'pointer' : 'default',
             opacity: custom_columns.size > 0 ? 1 : 0.5,
           }}
@@ -380,12 +395,12 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           onClick={on_pass}
           disabled={!is_my_turn || !can_pass || cards.length === 0}
           style={{
-            padding: is_mobile ? '6px 12px' : '8px 16px',
+            padding: is_mobile ? '4px 10px' : '8px 16px',
             fontSize: is_mobile ? 12 : 14,
             backgroundColor: is_my_turn && can_pass && cards.length > 0 ? '#dc3545' : '#444',
             color: '#fff',
             border: 'none',
-            borderRadius: 6,
+            borderRadius: 4,
             cursor: is_my_turn && can_pass && cards.length > 0 ? 'pointer' : 'default',
             opacity: is_my_turn && can_pass && cards.length > 0 ? 1 : 0.5,
           }}
@@ -396,13 +411,13 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           onClick={on_play}
           disabled={!is_my_turn || selected_ids.size === 0 || cards.length === 0}
           style={{
-            padding: is_mobile ? '6px 16px' : '8px 24px',
+            padding: is_mobile ? '4px 14px' : '8px 24px',
             fontSize: is_mobile ? 13 : 15,
             fontWeight: 'bold',
             backgroundColor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? '#28a745' : '#444',
             color: '#fff',
             border: 'none',
-            borderRadius: 6,
+            borderRadius: 4,
             cursor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 'pointer' : 'default',
             opacity: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 1 : 0.5,
           }}
