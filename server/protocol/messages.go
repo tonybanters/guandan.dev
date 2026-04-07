@@ -15,9 +15,11 @@ const (
 	Msg_Turn          Msg_Type = "turn"
 	Msg_Play_Made     Msg_Type = "play_made"
 	Msg_Hand_End      Msg_Type = "hand_end"
-	Msg_Tribute       Msg_Type = "tribute"
-	Msg_Tribute_Give  Msg_Type = "tribute_give"
-	Msg_Tribute_Recv  Msg_Type = "tribute_recv"
+	Msg_Tribute             Msg_Type = "tribute"
+	Msg_Tribute_Give        Msg_Type = "tribute_give"
+	Msg_Tribute_Recv        Msg_Type = "tribute_recv"
+	Msg_Tribute_Return      Msg_Type = "tribute_return"      // Server -> client: Winner must give back a card ≤10
+	Msg_Tribute_Return_Give Msg_Type = "tribute_return_give" // Client -> server: Here's the card I'm returning
 	Msg_Game_End      Msg_Type = "game_end"
 	Msg_Error         Msg_Type = "error"
 	Msg_Player_Joined Msg_Type = "player_joined"
@@ -96,6 +98,10 @@ type Tribute_Give_Payload struct {
 
 type Tribute_Recv_Payload struct {
 	Card game.Card `json:"card"`
+}
+
+type Tribute_Return_Payload struct {
+	To_Seat int `json:"to_seat"` // The seat you must give a card back to
 }
 
 type Game_End_Payload struct {

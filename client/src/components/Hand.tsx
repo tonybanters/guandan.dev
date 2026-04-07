@@ -1,8 +1,9 @@
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card as Card_Type, Rank, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades } from '../game/types'
 import { Card } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
+import { detect_combo } from '../game/combos'
 
 interface Hand_Props {
   cards: Card_Type[]
@@ -11,10 +12,12 @@ interface Hand_Props {
   on_card_click: (id: number) => void
   on_toggle_selection: (id: number) => void
   on_select_same_rank: (rank: number) => void
+  on_clear_selection: () => void
   on_play: () => void
   on_pass: () => void
   is_my_turn: boolean
   can_pass: boolean
+  is_tribute_mode?: boolean
 }
 
 interface Column {
@@ -23,16 +26,25 @@ interface Column {
   is_custom: boolean
 }
 
-export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_play, on_pass, is_my_turn, can_pass }: Hand_Props) {
+export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, on_play, on_pass, is_my_turn, can_pass, is_tribute_mode }: Hand_Props) {
   const is_mobile = use_is_mobile()
   const last_click = useRef<{ id: number; time: number } | null>(null)
   const [custom_columns, set_custom_columns] = useState<Map<string, number[]>>(new Map())
+  const prev_cards_length = useRef(0)
 
   // Swipe-to-select state
   const [is_swiping, set_is_swiping] = useState(false)
   const swipe_start = useRef<{ x: number; y: number } | null>(null)
   const swiped_cards = useRef<Set<number>>(new Set())
   const card_refs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+  // Reset custom columns when a new hand is dealt (hand size increases)
+  useEffect(() => {
+    if (cards.length > prev_cards_length.current && prev_cards_length.current > 0) {
+      set_custom_columns(new Map())
+    }
+    prev_cards_length.current = cards.length
+  }, [cards.length])
 
   const handle_card_click = useCallback((card: Card_Type) => {
     // Don't trigger click if we were swiping
@@ -82,13 +94,12 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
   })
 
   // Sort ranks high to low
+  // Jokers are always highest, level card second highest, then natural rank order (2=lowest, Ace=highest non-joker)
   const rank_order = (rank: number): number => {
-    if (rank === 14) return 1000
-    if (rank === 13) return 999
-    if (rank === level) return 998
-    if (rank === 0) return 15
-    if (rank === 12) return 14
-    return rank + 2
+    if (rank === 14) return 1000  // Red Joker
+    if (rank === 13) return 999   // Black Joker
+    if (rank === level) return 998  // Level card
+    return rank  // Natural order: 0(2) lowest, 12(Ace) highest non-joker
   }
 
   const sorted_ranks = Array.from(by_rank.keys()).sort((a, b) => rank_order(b) - rank_order(a))
@@ -112,9 +123,19 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
   const v_overlap = is_mobile ? 18 : 28
   const h_gap = is_mobile ? 3 : 4
 
+  // Check if selected cards form a valid combo
+  const is_valid_pile = useMemo(() => {
+    if (selected_ids.size === 0) return false
+    const selected_cards = Array.from(selected_ids)
+      .map(id => cards.find(c => c.Id === id))
+      .filter((c): c is Card_Type => c !== undefined)
+    if (selected_cards.length !== selected_ids.size) return false
+    return detect_combo(selected_cards, level) !== null
+  }, [selected_ids, cards, level])
+
   // Move selected cards to a new custom pile
   const handle_create_pile = () => {
-    if (selected_ids.size === 0) return
+    if (!is_valid_pile) return
 
     const selected_array = Array.from(selected_ids)
     set_custom_columns(prev => {
@@ -136,6 +157,9 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
 
       return next
     })
+
+    // Clear selection after creating pile
+    on_clear_selection()
   }
 
   // Reset all custom arrangements
@@ -143,8 +167,37 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     set_custom_columns(new Map())
   }
 
+  // Check if a specific suit has a straight flush (considering level♥ as wild card)
+  const has_straight_flush_for_suit = (suit: number): boolean => {
+    const suit_cards = cards.filter(c => c.Suit === suit && c.Suit < 4) // Exclude jokers
+    // The level card in hearts suit is wild
+    const wild_count = cards.filter(c => c.Rank === level && c.Suit === Suit_Hearts).length
+
+    if (suit_cards.length + wild_count < 5) return false
+
+    // Get non-wild cards of this suit, sorted by rank
+    const non_wild = suit_cards.filter(c => !(c.Rank === level && c.Suit === Suit_Hearts)).sort((a, b) => a.Rank - b.Rank)
+    if (non_wild.length === 0) return false
+
+    // Try to find 5 consecutive ranks in this suit, using wilds to fill gaps
+    for (let start = 0; start <= 12 - 4; start++) { // 2 (0) through Ace (12)
+      let gaps = 0
+      for (let rank = start; rank < start + 5; rank++) {
+        if (!non_wild.some(c => c.Rank === rank)) {
+          gaps++
+        }
+      }
+      if (gaps <= wild_count) return true
+    }
+    return false
+  }
+
+
   // Select all cards of a given suit
   const handle_select_suit = (suit: number) => {
+    // Only allow when that specific suit has a straight flush
+    if (!has_straight_flush_for_suit(suit)) return
+
     const suit_cards = cards.filter(c => c.Suit === suit)
     if (suit_cards.length === 0) return
 
@@ -216,6 +269,14 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     }
   }
 
+  // Check if selected card is valid for tribute (rank <= 10)
+  const is_valid_tribute_selection = useMemo(() => {
+    if (selected_ids.size !== 1) return false
+    const card_id = Array.from(selected_ids)[0]
+    const card = cards.find(c => c.Id === card_id)
+    return card ? card.Rank <= 10 : false
+  }, [selected_ids, cards])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
       {/* Cards area with swipe detection */}
@@ -277,6 +338,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                           zIndex: col_cards.length - card_idx,
                           cursor: 'pointer',
                           touchAction: 'none',
+                          opacity: 1,
                         }}
                       >
                         <Card
@@ -319,79 +381,89 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           </div>
         )}
 
-        {/* Suit buttons */}
+        {/* Suit buttons - available in tribute mode for SF detection, or when SF exists in normal mode */}
         <div style={{ display: 'flex', gap: is_mobile ? 3 : 6 }}>
           {[
             { suit: Suit_Spades, symbol: '♠', color: '#000' },
             { suit: Suit_Hearts, symbol: '♥', color: '#dc3545' },
             { suit: Suit_Clubs, symbol: '♣', color: '#000' },
             { suit: Suit_Diamonds, symbol: '♦', color: '#dc3545' },
-          ].map(({ suit, symbol, color }) => (
+          ].map(({ suit, symbol, color }) => {
+            const suit_enabled = has_straight_flush_for_suit(suit)
+            return (
             <button
               key={suit}
               onClick={() => handle_select_suit(suit)}
+              disabled={!suit_enabled}
+              title={suit_enabled ? `Select all ${symbol} cards` : `No straight flush in ${symbol}`}
               style={{
                 width: is_mobile ? 26 : 34,
                 height: is_mobile ? 26 : 34,
                 fontSize: is_mobile ? 14 : 20,
-                backgroundColor: '#fff',
-                color: color,
+                backgroundColor: suit_enabled ? '#fff' : '#f0f0f0',
+                color: suit_enabled ? color : '#ccc',
                 border: '1px solid #ccc',
                 borderRadius: 4,
-                cursor: 'pointer',
+                cursor: suit_enabled ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 0,
+                opacity: suit_enabled ? 1 : 0.5,
               }}
             >
               {symbol}
             </button>
-          ))}
+          )})}
         </div>
 
         {/* Divider */}
-        <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />
+        {!is_tribute_mode && <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />}
 
-        {/* Action buttons */}
-        <button
-          onClick={handle_create_pile}
-          disabled={selected_ids.size === 0}
-          style={{
-            padding: is_mobile ? '4px 8px' : '8px 14px',
-            fontSize: is_mobile ? 11 : 13,
-            backgroundColor: selected_ids.size > 0 ? '#9c27b0' : '#444',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            cursor: selected_ids.size > 0 ? 'pointer' : 'default',
-            opacity: selected_ids.size > 0 ? 1 : 0.5,
-          }}
-        >
-          Pile
-        </button>
-        <button
-          onClick={handle_reset}
-          disabled={custom_columns.size === 0}
-          style={{
-            padding: is_mobile ? '4px 8px' : '8px 14px',
-            fontSize: is_mobile ? 11 : 13,
-            backgroundColor: custom_columns.size > 0 ? '#607d8b' : '#444',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            cursor: custom_columns.size > 0 ? 'pointer' : 'default',
-            opacity: custom_columns.size > 0 ? 1 : 0.5,
-          }}
-        >
-          Reset
-        </button>
+        {/* Action buttons - hidden in tribute mode */}
+        {!is_tribute_mode && (
+          <>
+            <button
+              onClick={handle_create_pile}
+              disabled={!is_valid_pile}
+              title={selected_ids.size === 0 ? 'Select cards' : is_valid_pile ? 'Create pile' : 'Invalid combo'}
+              style={{
+                padding: is_mobile ? '4px 8px' : '8px 14px',
+                fontSize: is_mobile ? 11 : 13,
+                backgroundColor: is_valid_pile ? '#9c27b0' : '#444',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                cursor: is_valid_pile ? 'pointer' : 'default',
+                opacity: is_valid_pile ? 1 : 0.5,
+              }}
+            >
+              Pile
+            </button>
+            <button
+              onClick={handle_reset}
+              disabled={custom_columns.size === 0}
+              style={{
+                padding: is_mobile ? '4px 8px' : '8px 14px',
+                fontSize: is_mobile ? 11 : 13,
+                backgroundColor: custom_columns.size > 0 ? '#607d8b' : '#444',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                cursor: custom_columns.size > 0 ? 'pointer' : 'default',
+                opacity: custom_columns.size > 0 ? 1 : 0.5,
+              }}
+            >
+              Reset
+            </button>
+          </>
+        )}
 
-        {/* Divider */}
-        <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />
+        {/* Divider - hidden in tribute mode */}
+        {!is_tribute_mode && <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />}
 
         {/* Play/Pass buttons */}
-        <button
+        {!is_tribute_mode && <button
           onClick={on_pass}
           disabled={!is_my_turn || !can_pass || cards.length === 0}
           style={{
@@ -406,23 +478,29 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           }}
         >
           Pass
-        </button>
+        </button>}
+
+        {/* Play button (or Tribute button in tribute mode) */}
         <button
           onClick={on_play}
-          disabled={!is_my_turn || selected_ids.size === 0 || cards.length === 0}
+          disabled={is_tribute_mode ? !is_valid_tribute_selection : (!is_my_turn || selected_ids.size === 0 || cards.length === 0)}
           style={{
             padding: is_mobile ? '4px 14px' : '8px 24px',
             fontSize: is_mobile ? 13 : 15,
             fontWeight: 'bold',
-            backgroundColor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? '#28a745' : '#444',
-            color: '#fff',
+            backgroundColor: is_tribute_mode
+              ? (is_valid_tribute_selection ? '#ffc107' : '#444')
+              : (is_my_turn && selected_ids.size > 0 && cards.length > 0 ? '#28a745' : '#444'),
+            color: is_tribute_mode ? '#000' : '#fff',
             border: 'none',
             borderRadius: 4,
-            cursor: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 'pointer' : 'default',
-            opacity: is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 1 : 0.5,
+            cursor: is_tribute_mode
+              ? (is_valid_tribute_selection ? 'pointer' : 'default')
+              : (is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 'pointer' : 'default'),
+            opacity: (is_tribute_mode ? is_valid_tribute_selection : (is_my_turn && selected_ids.size > 0 && cards.length > 0)) ? 1 : 0.5,
           }}
         >
-          Play
+          {is_tribute_mode ? 'Tribute' : 'Play'}
         </button>
       </div>
     </div>

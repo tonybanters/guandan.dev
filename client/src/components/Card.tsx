@@ -3,6 +3,7 @@ import {
 } from '../game/types'
 
 type Card_Size = 'small' | 'normal'
+type Label_Position = 'top' | 'left'
 
 interface Card_Props {
     card: Card_Type
@@ -10,6 +11,7 @@ interface Card_Props {
     selected: boolean
     on_click: () => void
     size?: Card_Size
+    label_position?: Label_Position
 }
 
 const SIZE_CONFIG = {
@@ -17,17 +19,17 @@ const SIZE_CONFIG = {
     normal: { width: 60, height: 84, rank_font: 22, suit_font: 20 },
 }
 
-export function Card({ card, level, selected, on_click, size = 'normal' }: Card_Props) {
+export function Card({ card, level, selected, on_click, size = 'normal', label_position = 'top' }: Card_Props) {
     const is_joker = card.Suit === Suit_Joker
     const is_red = is_joker ? card.Rank === Rank_Red_Joker : is_red_suit(card.Suit)
     const is_wild_card = is_wild(card, level)
     const cfg = SIZE_CONFIG[size]
 
     const rank_display = is_joker
-        ? (card.Rank === Rank_Red_Joker ? 'R' : 'B')
+        ? '王'
         : get_rank_symbol(card.Rank)
 
-    const suit_display = is_joker ? '🃏' : get_suit_symbol(card.Suit)
+    const suit_display = is_joker ? '' : get_suit_symbol(card.Suit)
 
     return (
         <div
@@ -62,40 +64,79 @@ export function Card({ card, level, selected, on_click, size = 'normal' }: Card_
                 />
             )}
 
-            {/* Rank and suit at TOP of card so it's visible when stacked */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 4,
-                    left: 0,
-                    right: 0,
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 1,
-                }}
-            >
-                <span
+            {/* Rank and suit label - position depends on context */}
+            {label_position === 'top' ? (
+                // Top center - for cards in hand (vertical stacking)
+                <div
                     style={{
-                        fontSize: cfg.rank_font,
-                        fontWeight: 'bold',
-                        color: is_red ? '#dc3545' : '#000',
-                        lineHeight: 1,
+                        position: 'absolute',
+                        top: 4,
+                        left: 0,
+                        right: 0,
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 1,
                     }}
                 >
-                    {rank_display}
-                </span>
-                <span
+                    <span
+                        style={{
+                            fontSize: cfg.rank_font,
+                            fontWeight: 'bold',
+                            color: is_red ? '#dc3545' : '#000',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {rank_display}
+                    </span>
+                    {suit_display && (
+                        <span
+                            style={{
+                                fontSize: cfg.suit_font,
+                                color: is_red ? '#dc3545' : '#000',
+                                lineHeight: 1,
+                            }}
+                        >
+                            {suit_display}
+                        </span>
+                    )}
+                </div>
+            ) : (
+                // Left side - for cards on table (horizontal overlap)
+                <div
                     style={{
-                        fontSize: cfg.suit_font,
-                        color: is_red ? '#dc3545' : '#000',
-                        lineHeight: 1,
+                        position: 'absolute',
+                        top: 3,
+                        left: 3,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
                     }}
                 >
-                    {suit_display}
-                </span>
-            </div>
+                    <span
+                        style={{
+                            fontSize: cfg.rank_font,
+                            fontWeight: 'bold',
+                            color: is_red ? '#dc3545' : '#000',
+                            lineHeight: 1,
+                        }}
+                    >
+                        {rank_display}
+                    </span>
+                    {suit_display && (
+                        <span
+                            style={{
+                                fontSize: cfg.suit_font,
+                                color: is_red ? '#dc3545' : '#000',
+                                lineHeight: 1,
+                            }}
+                        >
+                            {suit_display}
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Big suit in center */}
             <div

@@ -66,6 +66,9 @@ export default function App() {
   const [last_play_seat, set_last_play_seat] = useState<number | null>(null)
   const [player_plays, set_player_plays] = useState<Record<number, { cards: Card[], is_pass: boolean }>>({})
   const [leading_seat, set_leading_seat] = useState<number | null>(null)
+  const [tribute_target, set_tribute_target] = useState<number | null>(null) // seat to give tribute to
+  const [return_target, set_return_target] = useState<number | null>(null) // seat to return card to
+  const [received_tribute_card, set_received_tribute_card] = useState<Card | null>(null)
 
   useEffect(() => {
     const unsub_room_state = on('room_state', (msg: Message) => {
@@ -96,6 +99,8 @@ export default function App() {
       set_player_card_counts([27, 27, 27, 27])
       set_player_plays({})
       set_leading_seat(null)
+      set_tribute_target(null)
+      set_return_target(null)
     })
 
     const unsub_turn = on('turn', (msg: Message) => {
@@ -146,6 +151,27 @@ export default function App() {
       setTimeout(() => set_error(null), 3000)
     })
 
+    const unsub_tribute = on('tribute', (msg: Message) => {
+      const payload = msg.payload as { from_seat: number; to_seat: number }
+      // Server tells us we need to give tribute to someone
+      set_tribute_target(payload.to_seat)
+    })
+
+    const unsub_tribute_return = on('tribute_return', (msg: Message) => {
+      const payload = msg.payload as { to_seat: number }
+      // Server tells us we need to return a card to someone
+      set_return_target(payload.to_seat)
+    })
+
+    const unsub_tribute_recv = on('tribute_recv', (msg: Message) => {
+      const payload = msg.payload as { card: Card }
+      // We received a card from tribute - add to hand
+      set_hand((prev) => sort_cards([...prev, payload.card], level))
+      // Show UI notification of received card
+      set_received_tribute_card(payload.card)
+      setTimeout(() => set_received_tribute_card(null), 2500)
+    })
+
     return () => {
       unsub_room_state()
       unsub_deal()
@@ -153,8 +179,11 @@ export default function App() {
       unsub_play_made()
       unsub_hand_end()
       unsub_error()
+      unsub_tribute()
+      unsub_tribute_return()
+      unsub_tribute_recv()
     }
-  }, [on])
+  }, [on, level])
 
   const handle_create_room = useCallback(
     (name: string) => {
@@ -192,6 +221,10 @@ export default function App() {
     })
   }, [])
 
+  const handle_clear_selection = useCallback(() => {
+    set_selected_ids(new Set())
+  }, [])
+
   const handle_select_same_rank = useCallback((rank: number) => {
     set_hand((current_hand) => {
       const same_rank_cards = find_same_rank(current_hand, rank)
@@ -225,6 +258,29 @@ export default function App() {
     send({ type: 'pass', payload: {} })
   }, [send])
 
+  const handle_give_tribute = useCallback((card_id: number) => {
+    send({ type: 'tribute_give', payload: { card_id } })
+    set_tribute_target(null)
+    set_hand((prev) => prev.filter((c) => c.Id !== card_id))
+  }, [send])
+
+  const handle_give_return = useCallback((card_id: number) => {
+    send({ type: 'tribute_return_give', payload: { card_id } })
+    set_return_target(null)
+    set_hand((prev) => prev.filter((c) => c.Id !== card_id))
+  }, [send])
+
+  const handle_tribute_play = useCallback(() => {
+    if (selected_ids.size !== 1) return
+    const card_id = Array.from(selected_ids)[0]
+    if (tribute_target !== null) {
+      handle_give_tribute(card_id)
+    } else if (return_target !== null) {
+      handle_give_return(card_id)
+    }
+    set_selected_ids(new Set())
+  }, [selected_ids, tribute_target, return_target, handle_give_tribute, handle_give_return])
+
   if (!connected) {
     return (
       <div style={styles.connecting}>
@@ -256,6 +312,7 @@ export default function App() {
         selected_ids={selected_ids}
         on_card_click={handle_card_click}
         on_select_same_rank={handle_select_same_rank}
+        on_clear_selection={handle_clear_selection}
         on_play={handle_play}
         on_pass={handle_pass}
         table_cards={table_cards}
@@ -269,6 +326,10 @@ export default function App() {
         last_play_seat={last_play_seat}
         player_plays={player_plays}
         leading_seat={leading_seat}
+        is_tribute_mode={tribute_target !== null || return_target !== null}
+        tribute_target_name={tribute_target !== null ? (players_map[tribute_target] || `Player ${tribute_target + 1}`) : (return_target !== null ? (players_map[return_target] || `Player ${return_target + 1}`) : undefined)}
+        on_tribute={handle_tribute_play}
+        received_tribute_card={received_tribute_card}
       />
       {error && <div style={styles.error}>{error}</div>}
     </>

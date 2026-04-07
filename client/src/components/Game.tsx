@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Card as Card_Type, Rank, get_rank_symbol } from '../game/types'
+import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Black_Joker, Rank_Red_Joker } from '../game/types'
 import { Hand } from './Hand'
 import { Card } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
@@ -9,12 +9,33 @@ interface Player_Play {
   is_pass: boolean
 }
 
+// Sort cards by natural rank order (A, 2, 3, 4, ... K, A) for display
+function sort_played_cards(cards: Card_Type[]): Card_Type[] {
+  const natural_order = (rank: Rank): number => {
+    // Jokers go last
+    if (rank === Rank_Black_Joker) return 100
+    if (rank === Rank_Red_Joker) return 101
+    // Ace can be low (before 2) - use 1
+    // For tubes/straights starting with A, we want A-2-3 order
+    // Natural order: A=1, 2=2, 3=3, ..., K=13, A(high)=14
+    // But for sorting display, we'll use: 2=0, 3=1, ..., A=12 with special handling
+    // Actually simpler: just sort by rank value where 2=0, 3=1, ..., K=11, A=12
+    if (rank === Rank_Two) return 0
+    if (rank >= 1 && rank <= 11) return rank // 3-K maps to 1-11
+    if (rank === 12) return 12 // Ace
+    return rank
+  }
+
+  return [...cards].sort((a, b) => natural_order(a.Rank) - natural_order(b.Rank))
+}
+
 interface Game_Props {
   hand: Card_Type[]
   level: Rank
   selected_ids: Set<number>
   on_card_click: (id: number) => void
   on_select_same_rank: (rank: number) => void
+  on_clear_selection: () => void
   on_play: () => void
   on_pass: () => void
   table_cards: Card_Type[]
@@ -28,6 +49,11 @@ interface Game_Props {
   last_play_seat: number | null
   player_plays: Record<number, Player_Play>
   leading_seat: number | null
+  // Tribute mode
+  is_tribute_mode?: boolean
+  tribute_target_name?: string
+  on_tribute?: () => void
+  received_tribute_card?: Card_Type | null
 }
 
 export function Game({
@@ -36,6 +62,7 @@ export function Game({
   selected_ids,
   on_card_click,
   on_select_same_rank,
+  on_clear_selection,
   on_play,
   on_pass,
   combo_type,
@@ -47,10 +74,33 @@ export function Game({
   players_map,
   player_plays,
   leading_seat,
+  is_tribute_mode,
+  tribute_target_name,
+  on_tribute,
+  received_tribute_card,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
   const is_mobile = use_is_mobile()
+
+  // Save the original on_card_click for suit buttons to use
+  const original_on_card_click = on_card_click
+
+  // Tribute mode: allow selecting any card, but will only be submitted if valid rank
+  const tribute_card_click = (id: number) => {
+    // Deselect if already selected, otherwise select (replacing any current selection)
+    if (selected_ids.has(id)) {
+      on_card_click(id)
+    } else {
+      on_clear_selection()
+      on_card_click(id)
+    }
+  }
+
+  // Tribute mode: disable rank selection
+  const tribute_select_same_rank = () => {
+    // No-op in tribute mode
+  }
 
   return (
     <div style={is_mobile ? mobile_styles.container : styles.container}>
@@ -134,19 +184,64 @@ export function Game({
         />
       </div>
 
+      {/* Tribute instruction - centered on screen */}
+      {is_tribute_mode && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+          color: '#ffc107',
+          fontWeight: 'bold',
+          fontSize: is_mobile ? 16 : 20,
+          zIndex: 100,
+        }}>
+          Select 1 card to give to {tribute_target_name}
+        </div>
+      )}
+
+      {/* Tribute receipt notification */}
+      {received_tribute_card && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ duration: 0.3 }}
+          style={{
+            position: 'fixed',
+            top: '40px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(76, 175, 80, 0.9)',
+            color: '#fff',
+            padding: is_mobile ? '8px 16px' : '12px 24px',
+            borderRadius: 8,
+            fontWeight: 'bold',
+            fontSize: is_mobile ? 14 : 16,
+            zIndex: 200,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            textAlign: 'center',
+          }}>
+          You received: {get_rank_symbol(received_tribute_card.Rank)}
+        </motion.div>
+      )}
+
       {/* My area at bottom */}
       <div style={is_mobile ? mobile_styles.my_area : styles.my_area}>
         <Hand
           cards={hand}
           level={level}
           selected_ids={selected_ids}
-          on_card_click={on_card_click}
-          on_toggle_selection={on_card_click}
-          on_select_same_rank={on_select_same_rank}
-          on_play={on_play}
+          on_card_click={is_tribute_mode ? tribute_card_click : on_card_click}
+          on_toggle_selection={original_on_card_click}
+          on_select_same_rank={is_tribute_mode ? tribute_select_same_rank : on_select_same_rank}
+          on_clear_selection={on_clear_selection}
+          on_play={is_tribute_mode ? on_tribute! : on_play}
           on_pass={on_pass}
-          is_my_turn={is_my_turn}
+          is_my_turn={!is_tribute_mode && is_my_turn}
           can_pass={can_pass}
+          is_tribute_mode={is_tribute_mode}
         />
 
         {/* Turn indicator - desktop only (mobile shows in Hand button row) */}
@@ -367,6 +462,9 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
   // Less overlap for played cards so all cards are visible
   const card_overlap = is_mobile ? -20 : -28
 
+  // Sort cards by rank for display
+  const sorted_cards = sort_played_cards(play.cards)
+
   return (
     <div style={get_position_style()}>
       <div style={{
@@ -378,7 +476,7 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
         border: (!is_mobile && is_leading) ? '2px solid #4caf50' : 'none',
         backgroundColor: (!is_mobile && is_leading) ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
       }}>
-        {play.cards.map((card, idx) => (
+        {sorted_cards.map((card, idx) => (
           <motion.div
             key={card.Id}
             initial={{ opacity: 0, scale: 0.5, y: position === 'top' ? -20 : 0, x: position === 'left' ? -20 : position === 'right' ? 20 : 0 }}
@@ -392,6 +490,7 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
               selected={false}
               on_click={() => {}}
               size="small"
+              label_position="left"
             />
           </motion.div>
         ))}
@@ -454,6 +553,9 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
   // Less overlap for played cards so all cards are visible
   const card_overlap = is_mobile ? -20 : -28
 
+  // Sort cards by rank for display
+  const sorted_cards = sort_played_cards(play.cards)
+
   return (
     <div style={base_style}>
       <div style={{
@@ -464,7 +566,7 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
         border: is_leading ? '2px solid #4caf50' : 'none',
         backgroundColor: is_leading ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
       }}>
-        {play.cards.map((card, idx) => (
+        {sorted_cards.map((card, idx) => (
           <motion.div
             key={card.Id}
             initial={{ opacity: 0, scale: 0.5, y: 20 }}
@@ -478,6 +580,7 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
               selected={false}
               on_click={() => {}}
               size="small"
+              label_position="left"
             />
           </motion.div>
         ))}

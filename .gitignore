@@ -1,6 +1,7 @@
 .direnv/
 .envrc
 notes/
+server/server
 server/tmp/
 client/node_modules/
 client/dist/

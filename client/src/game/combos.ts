@@ -178,15 +178,41 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
     }
   }
 
-  // Straight (5+ consecutive)
-  if (n >= 5 && by_rank.size === n) {
-    const ranks = sorted.map(c => c.Rank)
-    if (is_consecutive(ranks)) {
-      // Check if straight flush
-      if (sorted.every(c => c.Suit === sorted[0].Suit)) {
-        return { type: 'straight_flush', cards, value: get_card_value(sorted[n-1], level) + 500 + n * 10 }
+  // Straight (5+ consecutive, possibly with 2♥ as wild)
+  if (n >= 5) {
+    // Check normal consecutive (no wilds)
+    if (by_rank.size === n) {
+      const ranks = sorted.map(c => c.Rank)
+      if (is_consecutive(ranks)) {
+        // Check if straight flush
+        if (sorted.every(c => c.Suit === sorted[0].Suit)) {
+          return { type: 'straight_flush', cards, value: get_card_value(sorted[n-1], level) + 500 + n * 10 }
+        }
+        return { type: 'straight', cards, value: get_card_value(sorted[n-1], level) }
       }
-      return { type: 'straight', cards, value: get_card_value(sorted[n-1], level) }
+    }
+
+    // Check with level♥ as wild card (level♥ can fill one gap)
+    const has_wild_level = sorted.some(c => c.Rank === level && c.Suit === 0) // Suit_Hearts=0
+    if (has_wild_level && by_rank.size === n - 1) {
+      // Exclude the level♥ and check if remaining cards + one gap can form a straight
+      const non_wild = sorted.filter(c => !(c.Rank === level && c.Suit === 0))
+      const ranks = non_wild.map(c => c.Rank)
+
+      // Try inserting the wild card at different positions
+      for (let i = 0; i <= ranks.length; i++) {
+        // Try each possible rank the wild could fill
+        for (let wild_rank = 1; wild_rank <= 12; wild_rank++) {
+          const test_ranks = [...ranks.slice(0, i), wild_rank, ...ranks.slice(i)]
+          if (is_consecutive(test_ranks)) {
+            // Found valid straight with wild
+            if (sorted.every(c => c.Suit === sorted[0].Suit || (c.Rank === level && c.Suit === 0))) {
+              return { type: 'straight_flush', cards, value: Math.max(...ranks) + 500 + n * 10 }
+            }
+            return { type: 'straight', cards, value: Math.max(...ranks) }
+          }
+        }
+      }
     }
   }
 
