@@ -1,15 +1,41 @@
 import { motion } from 'framer-motion'
-import { Card as Card_Type, Rank, get_rank_symbol } from '../game/types'
+import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Black_Joker, Rank_Red_Joker } from '../game/types'
 import { Hand } from './Hand'
-import { Table } from './Table'
-import { Card_Back } from './Card'
+import { Card } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
+
+interface Player_Play {
+  cards: Card_Type[]
+  is_pass: boolean
+}
+
+// Sort cards by natural rank order (A, 2, 3, 4, ... K, A) for display
+function sort_played_cards(cards: Card_Type[]): Card_Type[] {
+  const natural_order = (rank: Rank): number => {
+    // Jokers go last
+    if (rank === Rank_Black_Joker) return 100
+    if (rank === Rank_Red_Joker) return 101
+    // Ace can be low (before 2) - use 1
+    // For tubes/straights starting with A, we want A-2-3 order
+    // Natural order: A=1, 2=2, 3=3, ..., K=13, A(high)=14
+    // But for sorting display, we'll use: 2=0, 3=1, ..., A=12 with special handling
+    // Actually simpler: just sort by rank value where 2=0, 3=1, ..., K=11, A=12
+    if (rank === Rank_Two) return 0
+    if (rank >= 1 && rank <= 11) return rank // 3-K maps to 1-11
+    if (rank === 12) return 12 // Ace
+    return rank
+  }
+
+  return [...cards].sort((a, b) => natural_order(a.Rank) - natural_order(b.Rank))
+}
 
 interface Game_Props {
   hand: Card_Type[]
   level: Rank
   selected_ids: Set<number>
   on_card_click: (id: number) => void
+  on_select_same_rank: (rank: number) => void
+  on_clear_selection: () => void
   on_play: () => void
   on_pass: () => void
   table_cards: Card_Type[]
@@ -21,6 +47,13 @@ interface Game_Props {
   team_levels: [number, number]
   players_map: Record<number, string>
   last_play_seat: number | null
+  player_plays: Record<number, Player_Play>
+  leading_seat: number | null
+  // Tribute mode
+  is_tribute_mode?: boolean
+  tribute_target_name?: string
+  on_tribute?: () => void
+  received_tribute_card?: Card_Type | null
 }
 
 export function Game({
@@ -28,9 +61,10 @@ export function Game({
   level,
   selected_ids,
   on_card_click,
+  on_select_same_rank,
+  on_clear_selection,
   on_play,
   on_pass,
-  table_cards,
   combo_type,
   current_turn,
   my_seat,
@@ -38,303 +72,531 @@ export function Game({
   player_card_counts,
   team_levels,
   players_map,
-  last_play_seat,
+  player_plays,
+  leading_seat,
+  is_tribute_mode,
+  tribute_target_name,
+  on_tribute,
+  received_tribute_card,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
   const is_mobile = use_is_mobile()
 
-  if (is_mobile) {
-    return (
-      <div style={mobile_styles.container}>
-        <div style={mobile_styles.info_bar}>
-          <div style={mobile_styles.level_badge}>
-            Lvl: {get_rank_symbol(level)}
-          </div>
-          <div style={mobile_styles.team_scores}>
-            <span style={{ color: '#2196f3' }}>T1: {get_rank_symbol(team_levels[0] as Rank)}</span>
-            <span style={{ marginLeft: 8, color: '#e91e63' }}>T2: {get_rank_symbol(team_levels[1] as Rank)}</span>
-          </div>
-        </div>
+  // Save the original on_card_click for suit buttons to use
+  const original_on_card_click = on_card_click
 
-        <Mobile_Opponent_Bar
-          positions={relative_positions}
-          player_card_counts={player_card_counts}
-          current_turn={current_turn}
-          last_play_seat={last_play_seat}
-          players_map={players_map}
+  // Tribute mode: allow selecting any card, but will only be submitted if valid rank
+  const tribute_card_click = (id: number) => {
+    // Deselect if already selected, otherwise select (replacing any current selection)
+    if (selected_ids.has(id)) {
+      on_card_click(id)
+    } else {
+      on_clear_selection()
+      on_card_click(id)
+    }
+  }
+
+  // Tribute mode: disable rank selection
+  const tribute_select_same_rank = () => {
+    // No-op in tribute mode
+  }
+
+  return (
+    <div style={is_mobile ? mobile_styles.container : styles.container}>
+      {/* Info bar */}
+      <div style={is_mobile ? mobile_styles.info_bar : styles.info_bar}>
+        <div style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
+          Lvl: {get_rank_symbol(level)}
+        </div>
+        <div style={is_mobile ? mobile_styles.team_scores : styles.team_scores}>
+          <span style={{ color: '#64b5f6' }}>T1: {get_rank_symbol(team_levels[0] as Rank)}</span>
+          <span style={{ marginLeft: is_mobile ? 8 : 12, color: '#f48fb1' }}>T2: {get_rank_symbol(team_levels[1] as Rank)}</span>
+        </div>
+      </div>
+
+      {/* Game area - relative container with absolute positioned elements */}
+      <div style={is_mobile ? mobile_styles.game_area : styles.game_area}>
+        {/* Top player badge + cards */}
+        <Player_Badge
+          seat={relative_positions.top}
+          name={players_map[relative_positions.top]}
+          count={player_card_counts[relative_positions.top]}
+          is_turn={current_turn === relative_positions.top}
+          is_leading={leading_seat === relative_positions.top}
+          position="top"
+          is_mobile={is_mobile}
+        />
+        <Played_Cards
+          play={player_plays[relative_positions.top]}
+          is_leading={leading_seat === relative_positions.top}
+          combo_type={leading_seat === relative_positions.top ? combo_type : ''}
+          level={level}
+          position="top"
+          is_mobile={is_mobile}
         />
 
-        <div style={mobile_styles.table_area}>
-          <Table cards={table_cards} level={level} combo_type={combo_type} last_play_seat={last_play_seat} />
+        {/* Left player badge + cards */}
+        <Player_Badge
+          seat={relative_positions.left}
+          name={players_map[relative_positions.left]}
+          count={player_card_counts[relative_positions.left]}
+          is_turn={current_turn === relative_positions.left}
+          is_leading={leading_seat === relative_positions.left}
+          position="left"
+          is_mobile={is_mobile}
+        />
+        <Played_Cards
+          play={player_plays[relative_positions.left]}
+          is_leading={leading_seat === relative_positions.left}
+          combo_type={leading_seat === relative_positions.left ? combo_type : ''}
+          level={level}
+          position="left"
+          is_mobile={is_mobile}
+        />
+
+        {/* Right player badge + cards */}
+        <Player_Badge
+          seat={relative_positions.right}
+          name={players_map[relative_positions.right]}
+          count={player_card_counts[relative_positions.right]}
+          is_turn={current_turn === relative_positions.right}
+          is_leading={leading_seat === relative_positions.right}
+          position="right"
+          is_mobile={is_mobile}
+        />
+        <Played_Cards
+          play={player_plays[relative_positions.right]}
+          is_leading={leading_seat === relative_positions.right}
+          combo_type={leading_seat === relative_positions.right ? combo_type : ''}
+          level={level}
+          position="right"
+          is_mobile={is_mobile}
+        />
+
+        {/* My played cards - at bottom center of game area */}
+        <My_Played_Cards
+          play={player_plays[my_seat]}
+          is_leading={leading_seat === my_seat}
+          combo_type={leading_seat === my_seat ? combo_type : ''}
+          level={level}
+          is_mobile={is_mobile}
+        />
+      </div>
+
+      {/* Tribute instruction - centered on screen */}
+      {is_tribute_mode && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+          color: '#ffc107',
+          fontWeight: 'bold',
+          fontSize: is_mobile ? 16 : 20,
+          zIndex: 100,
+        }}>
+          Select 1 card to give to {tribute_target_name}
         </div>
+      )}
 
-        <div style={mobile_styles.my_area}>
-          <Hand
-            cards={hand}
-            level={level}
-            selected_ids={selected_ids}
-            on_card_click={on_card_click}
-          />
+      {/* Tribute receipt notification */}
+      {received_tribute_card && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ duration: 0.3 }}
+          style={{
+            position: 'fixed',
+            top: '40px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(76, 175, 80, 0.9)',
+            color: '#fff',
+            padding: is_mobile ? '8px 16px' : '12px 24px',
+            borderRadius: 8,
+            fontWeight: 'bold',
+            fontSize: is_mobile ? 14 : 16,
+            zIndex: 200,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            textAlign: 'center',
+          }}>
+          You received: {get_rank_symbol(received_tribute_card.Rank)}
+        </motion.div>
+      )}
 
-          <div style={mobile_styles.actions}>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={on_play}
-              disabled={!is_my_turn || selected_ids.size === 0 || hand.length === 0}
-              style={{
-                ...mobile_styles.action_button,
-                backgroundColor: is_my_turn && selected_ids.size > 0 && hand.length > 0 ? '#28a745' : '#444',
-              }}
-            >
-              Play
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={on_pass}
-              disabled={!is_my_turn || !can_pass || hand.length === 0}
-              style={{
-                ...mobile_styles.action_button,
-                backgroundColor: is_my_turn && can_pass && hand.length > 0 ? '#dc3545' : '#444',
-              }}
-            >
-              Pass
-            </motion.button>
-          </div>
+      {/* My area at bottom */}
+      <div style={is_mobile ? mobile_styles.my_area : styles.my_area}>
+        <Hand
+          cards={hand}
+          level={level}
+          selected_ids={selected_ids}
+          on_card_click={is_tribute_mode ? tribute_card_click : on_card_click}
+          on_toggle_selection={original_on_card_click}
+          on_select_same_rank={is_tribute_mode ? tribute_select_same_rank : on_select_same_rank}
+          on_clear_selection={on_clear_selection}
+          on_play={is_tribute_mode ? on_tribute! : on_play}
+          on_pass={on_pass}
+          is_my_turn={!is_tribute_mode && is_my_turn}
+          can_pass={can_pass}
+          is_tribute_mode={is_tribute_mode}
+        />
 
-          {is_my_turn && hand.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={mobile_styles.turn_indicator}
-            >
-              Your turn!
-            </motion.div>
-          )}
-          {hand.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ ...mobile_styles.turn_indicator, backgroundColor: '#28a745' }}
-            >
-              You finished!
-            </motion.div>
-          )}
+        {/* Turn indicator - desktop only (mobile shows in Hand button row) */}
+        {!is_mobile && is_my_turn && hand.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={styles.turn_indicator}
+          >
+            Your turn!
+          </motion.div>
+        )}
+        {hand.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={{ ...(is_mobile ? mobile_styles.turn_indicator : styles.turn_indicator), backgroundColor: '#28a745' }}
+          >
+            You finished!
+          </motion.div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface Player_Badge_Props {
+  seat: number
+  name?: string
+  count: number
+  is_turn: boolean
+  is_leading: boolean
+  position: 'top' | 'left' | 'right'
+  is_mobile: boolean
+}
+
+function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mobile }: Player_Badge_Props) {
+  const get_position_style = (): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      zIndex: 10,
+    }
+
+    if (position === 'top') {
+      return {
+        ...base,
+        top: is_mobile ? 2 : 8,
+        left: '50%',
+        transform: 'translateX(-50%)',
+      }
+    }
+    if (position === 'left') {
+      return {
+        ...base,
+        left: is_mobile ? 2 : 8,
+        top: '40%',
+        transform: 'translateY(-50%)',
+      }
+    }
+    // right
+    return {
+      ...base,
+      right: is_mobile ? 2 : 8,
+      top: '40%',
+      transform: 'translateY(-50%)',
+    }
+  }
+
+  const get_border_color = () => {
+    if (is_leading) return '#4caf50'
+    if (is_turn) return '#ffc107'
+    return 'rgba(255,255,255,0.2)'
+  }
+
+  const get_bg_color = () => {
+    if (is_leading) return 'rgba(76, 175, 80, 0.3)'
+    if (is_turn) return 'rgba(255, 193, 7, 0.3)'
+    return 'rgba(0, 0, 0, 0.6)'
+  }
+
+  // Mobile: minimal floating badge with no border/background
+  if (is_mobile) {
+    return (
+      <div
+        style={{
+          ...get_position_style(),
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+        }}
+      >
+        <div style={{
+          color: seat % 2 === 0 ? '#64b5f6' : '#f48fb1',
+          fontSize: 9,
+          fontWeight: 'bold',
+          maxWidth: 50,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {name || `P${seat + 1}`}
+        </div>
+        <div style={{
+          color: is_turn ? '#ffc107' : is_leading ? '#4caf50' : '#fff',
+          fontSize: 12,
+          fontWeight: 'bold',
+          lineHeight: 1,
+        }}>
+          {count}
         </div>
       </div>
     )
   }
 
-  return (
-    <div style={styles.container}>
-      <div style={styles.info_bar}>
-        <div style={styles.level_badge}>
-          Level: {get_rank_symbol(level)}
-        </div>
-        <div style={styles.team_scores}>
-          <span style={{ color: '#2196f3' }}>Team 1: {get_rank_symbol(team_levels[0] as Rank)}</span>
-          <span style={{ marginLeft: 16, color: '#e91e63' }}>Team 2: {get_rank_symbol(team_levels[1] as Rank)}</span>
-        </div>
-      </div>
-
-      <div style={styles.main_layout}>
-        <div style={styles.game_area}>
-          <div style={styles.opponent_top}>
-            <Opponent_Hand
-              count={player_card_counts[relative_positions.top]}
-              is_turn={current_turn === relative_positions.top}
-              just_played={last_play_seat === relative_positions.top}
-              seat={relative_positions.top}
-              name={players_map[relative_positions.top]}
-            />
-          </div>
-
-          <div style={styles.middle_row}>
-            <div style={styles.opponent_side}>
-              <Opponent_Hand
-                count={player_card_counts[relative_positions.left]}
-                is_turn={current_turn === relative_positions.left}
-                just_played={last_play_seat === relative_positions.left}
-                seat={relative_positions.left}
-                vertical
-                name={players_map[relative_positions.left]}
-              />
-            </div>
-
-            <div style={styles.table_area}>
-              <Table cards={table_cards} level={level} combo_type={combo_type} last_play_seat={last_play_seat} />
-            </div>
-
-            <div style={styles.opponent_side}>
-            <Opponent_Hand
-              count={player_card_counts[relative_positions.right]}
-              is_turn={current_turn === relative_positions.right}
-              just_played={last_play_seat === relative_positions.right}
-              seat={relative_positions.right}
-              vertical
-              name={players_map[relative_positions.right]}
-            />
-          </div>
-          </div>
-
-          <div style={styles.my_area}>
-          <Hand
-            cards={hand}
-            level={level}
-            selected_ids={selected_ids}
-            on_card_click={on_card_click}
-          />
-
-          <div style={styles.actions}>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={on_play}
-              disabled={!is_my_turn || selected_ids.size === 0 || hand.length === 0}
-              style={{
-                ...styles.action_button,
-                backgroundColor: is_my_turn && selected_ids.size > 0 && hand.length > 0 ? '#28a745' : '#444',
-              }}
-            >
-              Play
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={on_pass}
-              disabled={!is_my_turn || !can_pass || hand.length === 0}
-              style={{
-                ...styles.action_button,
-                backgroundColor: is_my_turn && can_pass && hand.length > 0 ? '#dc3545' : '#444',
-              }}
-            >
-              Pass
-            </motion.button>
-          </div>
-
-          {is_my_turn && hand.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={styles.turn_indicator}
-            >
-              Your turn!
-            </motion.div>
-          )}
-          {hand.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ ...styles.turn_indicator, backgroundColor: '#28a745' }}
-            >
-              You finished!
-            </motion.div>
-          )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface Mobile_Opponent_Bar_Props {
-  positions: { top: number; left: number; right: number }
-  player_card_counts: number[]
-  current_turn: number
-  last_play_seat: number | null
-  players_map: Record<number, string>
-}
-
-function Mobile_Opponent_Bar({ positions, player_card_counts, current_turn, last_play_seat, players_map }: Mobile_Opponent_Bar_Props) {
-  const opponents = [positions.left, positions.top, positions.right]
-
-  return (
-    <div style={mobile_styles.opponent_bar}>
-      {opponents.map((seat) => {
-        const is_turn = current_turn === seat
-        const just_played = last_play_seat === seat
-
-        return (
-          <div
-            key={seat}
-            style={{
-              ...mobile_styles.opponent_chip,
-              backgroundColor: just_played ? 'rgba(76, 175, 80, 0.3)' : is_turn ? 'rgba(255,193,7,0.3)' : 'rgba(255,255,255,0.1)',
-              borderColor: just_played ? '#4caf50' : is_turn ? '#ffc107' : 'transparent',
-            }}
-          >
-            <span style={{ color: seat % 2 === 0 ? '#2196f3' : '#e91e63', fontWeight: 'bold', fontSize: 12 }}>
-              {players_map[seat] || `P${seat + 1}`}
-            </span>
-            <span style={{ color: '#fff', fontSize: 11, marginLeft: 4 }}>
-              ({player_card_counts[seat]})
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-interface Opponent_Hand_Props {
-  count: number
-  is_turn: boolean
-  just_played?: boolean
-  seat: number
-  vertical?: boolean
-  name?: string
-}
-
-function Opponent_Hand({ count, is_turn, just_played, seat, vertical, name }: Opponent_Hand_Props) {
-  const display_count = Math.min(count, 10)
-  const overlap = vertical ? 15 : 20
-
-  const get_highlight_style = () => {
-    if (just_played) return { backgroundColor: 'rgba(76, 175, 80, 0.3)', border: '2px solid #4caf50' }
-    if (is_turn) return { backgroundColor: 'rgba(255,193,7,0.2)', border: '2px solid #ffc107' }
-    return { backgroundColor: 'transparent', border: '2px solid transparent' }
-  }
-
+  // Desktop: boxed badge
   return (
     <div
       style={{
+        ...get_position_style(),
         display: 'flex',
-        flexDirection: vertical ? 'column' : 'row',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: 8,
-        padding: 8,
-        borderRadius: 8,
-        transition: 'all 0.2s ease',
-        ...get_highlight_style(),
+        padding: '6px 12px',
+        borderRadius: 10,
+        border: `2px solid ${get_border_color()}`,
+        backgroundColor: get_bg_color(),
+        minWidth: 50,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: vertical ? 'column' : 'row',
-          position: 'relative',
-          width: vertical ? 50 : 50 + (display_count - 1) * overlap,
-          height: vertical ? 70 + (display_count - 1) * overlap : 70,
-        }}
-      >
-        {Array.from({ length: display_count }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              left: vertical ? 0 : i * overlap,
-              top: vertical ? i * overlap : 0,
-              transform: 'scale(0.7)',
-              transformOrigin: 'top left',
-            }}
+      <div style={{
+        color: seat % 2 === 0 ? '#64b5f6' : '#f48fb1',
+        fontSize: 12,
+        fontWeight: 'bold',
+        maxWidth: 70,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {name || `P${seat + 1}`}
+      </div>
+      <div style={{
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+        lineHeight: 1.2,
+      }}>
+        {count}
+      </div>
+    </div>
+  )
+}
+
+interface Played_Cards_Props {
+  play?: Player_Play
+  is_leading: boolean
+  combo_type: string
+  level: Rank
+  position: 'top' | 'left' | 'right'
+  is_mobile: boolean
+}
+
+function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile }: Played_Cards_Props) {
+  if (!play) return null
+
+  const get_position_style = (): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      zIndex: 5,
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+    }
+
+    // Cards appear toward the center from the badge
+    if (position === 'top') {
+      return {
+        ...base,
+        top: is_mobile ? 28 : 70,
+        left: '50%',
+        transform: 'translateX(-50%)',
+      }
+    }
+    if (position === 'left') {
+      return {
+        ...base,
+        left: is_mobile ? 45 : 80,
+        top: '40%',
+        transform: 'translateY(-50%)',
+      }
+    }
+    // right
+    return {
+      ...base,
+      right: is_mobile ? 45 : 80,
+      top: '40%',
+      transform: 'translateY(-50%)',
+    }
+  }
+
+  if (play.is_pass) {
+    return (
+      <div style={get_position_style()}>
+        <div style={{
+          color: '#aaa',
+          fontSize: is_mobile ? 11 : 16,
+          fontStyle: 'italic',
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          padding: is_mobile ? '2px 8px' : '4px 12px',
+          borderRadius: 4,
+        }}>
+          Pass
+        </div>
+      </div>
+    )
+  }
+
+  // Less overlap for played cards so all cards are visible
+  const card_overlap = is_mobile ? -20 : -28
+
+  // Sort cards by rank for display
+  const sorted_cards = sort_played_cards(play.cards)
+
+  return (
+    <div style={get_position_style()}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        // No container border on mobile, only on desktop for leading
+        padding: (!is_mobile && is_leading) ? 4 : 0,
+        borderRadius: 6,
+        border: (!is_mobile && is_leading) ? '2px solid #4caf50' : 'none',
+        backgroundColor: (!is_mobile && is_leading) ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
+      }}>
+        {sorted_cards.map((card, idx) => (
+          <motion.div
+            key={card.Id}
+            initial={{ opacity: 0, scale: 0.5, y: position === 'top' ? -20 : 0, x: position === 'left' ? -20 : position === 'right' ? 20 : 0 }}
+            animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+            transition={{ delay: idx * 0.03 }}
+            style={{ marginLeft: idx > 0 ? card_overlap : 0 }}
           >
-            <Card_Back />
-          </div>
+            <Card
+              card={card}
+              level={level}
+              selected={false}
+              on_click={() => {}}
+              size="small"
+              label_position="left"
+            />
+          </motion.div>
         ))}
       </div>
-      <div style={{ color: '#fff', fontSize: 12 }}>
-        {name || `Seat ${seat + 1}`}: {count}
+      {is_leading && combo_type && (
+        <div style={{
+          marginLeft: is_mobile ? 4 : 8,
+          padding: is_mobile ? '2px 4px' : '3px 8px',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          fontSize: is_mobile ? 8 : 12,
+          borderRadius: 4,
+        }}>
+          {combo_type}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface My_Played_Cards_Props {
+  play?: Player_Play
+  is_leading: boolean
+  combo_type: string
+  level: Rank
+  is_mobile: boolean
+}
+
+function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_Played_Cards_Props) {
+  if (!play) return null
+
+  const base_style: React.CSSProperties = {
+    position: 'absolute',
+    zIndex: 5,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    bottom: is_mobile ? 8 : 16,
+    left: '50%',
+    transform: 'translateX(-50%)',
+  }
+
+  if (play.is_pass) {
+    return (
+      <div style={base_style}>
+        <div style={{
+          color: '#aaa',
+          fontSize: is_mobile ? 11 : 16,
+          fontStyle: 'italic',
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          padding: is_mobile ? '2px 8px' : '4px 12px',
+          borderRadius: 4,
+        }}>
+          Pass
+        </div>
       </div>
+    )
+  }
+
+  // Less overlap for played cards so all cards are visible
+  const card_overlap = is_mobile ? -20 : -28
+
+  // Sort cards by rank for display
+  const sorted_cards = sort_played_cards(play.cards)
+
+  return (
+    <div style={base_style}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        padding: is_leading ? (is_mobile ? 2 : 4) : 0,
+        borderRadius: 6,
+        border: is_leading ? '2px solid #4caf50' : 'none',
+        backgroundColor: is_leading ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
+      }}>
+        {sorted_cards.map((card, idx) => (
+          <motion.div
+            key={card.Id}
+            initial={{ opacity: 0, scale: 0.5, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ delay: idx * 0.03 }}
+            style={{ marginLeft: idx > 0 ? card_overlap : 0 }}
+          >
+            <Card
+              card={card}
+              level={level}
+              selected={false}
+              on_click={() => {}}
+              size="small"
+              label_position="left"
+            />
+          </motion.div>
+        ))}
+      </div>
+      {is_leading && combo_type && (
+        <div style={{
+          marginLeft: is_mobile ? 4 : 8,
+          padding: is_mobile ? '2px 4px' : '3px 8px',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          fontSize: is_mobile ? 8 : 12,
+          borderRadius: 4,
+        }}>
+          {combo_type}
+        </div>
+      )}
     </div>
   )
 }
@@ -359,17 +621,17 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '8px 12px',
+    padding: '4px 12px',
     backgroundColor: '#16213e',
     flexShrink: 0,
   },
   level_badge: {
-    padding: '6px 12px',
+    padding: '3px 8px',
     backgroundColor: '#ffc107',
     color: '#000',
-    borderRadius: 8,
+    borderRadius: 6,
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 12,
   },
   team_scores: {
     color: '#fff',
@@ -377,74 +639,28 @@ const styles: Record<string, React.CSSProperties> = {
   },
   game_area: {
     flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    padding: 8,
+    position: 'relative',
     minHeight: 0,
-  },
-  opponent_top: {
-    display: 'flex',
-    justifyContent: 'center',
-    marginBottom: 8,
-    flexShrink: 0,
-  },
-  middle_row: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    minHeight: 0,
-  },
-  opponent_side: {
-    width: 80,
-    display: 'flex',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  table_area: {
-    flex: 1,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 12,
-    margin: '0 8px',
-    minHeight: 120,
+    overflow: 'hidden',
   },
   my_area: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: 8,
-    borderTop: '2px solid #333',
+    paddingTop: 4,
+    paddingBottom: 8,
+    borderTop: '1px solid rgba(255,255,255,0.1)',
     flexShrink: 0,
-  },
-  actions: {
-    display: 'flex',
-    gap: 12,
-    marginTop: 8,
-  },
-  action_button: {
-    padding: '10px 24px',
-    fontSize: 14,
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    cursor: 'pointer',
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   turn_indicator: {
-    marginTop: 8,
-    padding: '6px 12px',
+    marginTop: 4,
+    padding: '4px 10px',
     backgroundColor: '#ffc107',
     color: '#000',
-    borderRadius: 8,
+    borderRadius: 6,
     fontWeight: 'bold',
-    fontSize: 12,
-  },
-  main_layout: {
-    display: 'flex',
-    flex: 1,
-    overflow: 'hidden',
-    minHeight: 0,
+    fontSize: 11,
   },
 }
 
@@ -460,76 +676,43 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '6px 10px',
+    padding: '3px 8px',
     backgroundColor: '#16213e',
     flexShrink: 0,
   },
   level_badge: {
-    padding: '4px 8px',
+    padding: '2px 6px',
     backgroundColor: '#ffc107',
     color: '#000',
     borderRadius: 6,
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 10,
   },
   team_scores: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 10,
   },
-  opponent_bar: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: 8,
-    padding: '8px 4px',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    flexShrink: 0,
-  },
-  opponent_chip: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '6px 10px',
-    borderRadius: 16,
-    border: '2px solid transparent',
-  },
-  table_area: {
+  game_area: {
     flex: 1,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
-    margin: 8,
-    minHeight: 100,
+    position: 'relative',
+    minHeight: 0,
+    overflow: 'hidden',
   },
   my_area: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: 4,
-    paddingBottom: 8,
-    borderTop: '2px solid #333',
+    paddingTop: 2,
+    paddingBottom: 4,
     flexShrink: 0,
   },
-  actions: {
-    display: 'flex',
-    gap: 16,
-    marginTop: 4,
-  },
-  action_button: {
-    padding: '10px 28px',
-    fontSize: 14,
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    cursor: 'pointer',
-  },
   turn_indicator: {
-    marginTop: 6,
-    padding: '4px 10px',
-    backgroundColor: '#ffc107',
-    color: '#000',
-    borderRadius: 6,
+    marginTop: 2,
+    padding: '2px 6px',
+    backgroundColor: '#28a745',
+    color: '#fff',
+    borderRadius: 4,
     fontWeight: 'bold',
-    fontSize: 11,
+    fontSize: 9,
   },
 }

@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
 
-const MOBILE_BREAKPOINT = 768
+// Detect mobile: small width OR small height (catches landscape phones)
+function check_is_mobile(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth < 768 || window.innerHeight < 500
+}
 
 export function use_is_mobile(): boolean {
-  const [is_mobile, set_is_mobile] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
-  )
+  const [is_mobile, set_is_mobile] = useState(check_is_mobile)
 
   useEffect(() => {
     const handle_resize = () => {
-      set_is_mobile(window.innerWidth < MOBILE_BREAKPOINT)
+      set_is_mobile(check_is_mobile())
     }
 
     window.addEventListener('resize', handle_resize)

@@ -123,6 +123,8 @@ func (c *Client) handle_message(hub *Hub, msg *protocol.Message) {
 		c.handle_pass()
 	case protocol.Msg_Tribute_Give:
 		c.handle_tribute_give(msg)
+	case protocol.Msg_Tribute_Return_Give:
+		c.handle_tribute_return_give(msg)
 	case protocol.Msg_Fill_Bots:
 		c.handle_fill_bots()
 	}
@@ -192,6 +194,21 @@ func (c *Client) handle_tribute_give(msg *protocol.Message) {
 	json.Unmarshal(payload_bytes, &payload)
 
 	c.room.tribute <- Tribute_Action{
+		client:  c,
+		card_id: payload.Card_Id,
+	}
+}
+
+func (c *Client) handle_tribute_return_give(msg *protocol.Message) {
+	if c.room == nil {
+		return
+	}
+
+	payload_bytes, _ := json.Marshal(msg.Payload)
+	var payload protocol.Tribute_Give_Payload
+	json.Unmarshal(payload_bytes, &payload)
+
+	c.room.tribute_return <- Tribute_Action{
 		client:  c,
 		card_id: payload.Card_Id,
 	}

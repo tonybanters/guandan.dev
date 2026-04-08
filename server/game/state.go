@@ -11,9 +11,11 @@ const (
 )
 
 type Tribute_Info struct {
-	From_Seat int
-	To_Seat   int
-	Done      bool
+	From_Seat    int
+	To_Seat      int
+	Done         bool
+	Card_Value   int  // Value of the tributed card (set when tribute is paid)
+	Return_Done  bool // Whether the winner has given back a card
 }
 
 type Game_State struct {
@@ -91,66 +93,50 @@ func (g *Game_State) Setup_Tributes() {
 		return
 	}
 
-	first := g.Finish_Order[0]
-	winning_team := first % 2
+	// Organize players by finish position (0=1st, 1=2nd, 2=3rd, 3=4th)
+	var players_by_position [4]int
 
-	var last_loser int = -1
-	var second_last_loser int = -1
+	// Add finished players
+	for i := 0; i < len(g.Finish_Order); i++ {
+		players_by_position[i] = g.Finish_Order[i]
+	}
 
-	for i := 3; i >= 0; i-- {
-		seat := -1
-		if i < len(g.Finish_Order) {
-			seat = g.Finish_Order[i]
-		} else {
-			for s := 0; s < 4; s++ {
-				found := false
-				for _, f := range g.Finish_Order {
-					if f == s {
-						found = true
-						break
-					}
-				}
-				if !found {
-					seat = s
-					break
-				}
-			}
-		}
-
-		if seat%2 != winning_team {
-			if last_loser == -1 {
-				last_loser = seat
-			} else if second_last_loser == -1 {
-				second_last_loser = seat
+	// Find unfinished players and add them at the end
+	unfinished_idx := len(g.Finish_Order)
+	for s := 0; s < 4; s++ {
+		found := false
+		for _, f := range g.Finish_Order {
+			if f == s {
+				found = true
 				break
 			}
 		}
-	}
-
-	first_winner := g.Finish_Order[0]
-	var second_winner int = -1
-	for _, seat := range g.Finish_Order {
-		if seat%2 == winning_team && seat != first_winner {
-			second_winner = seat
-			break
+		if !found && unfinished_idx < 4 {
+			players_by_position[unfinished_idx] = s
+			unfinished_idx++
 		}
 	}
 
-	if last_loser != -1 {
+	first_place := players_by_position[0]
+
+	// 4th place always gives to 1st place (even if teammates in a 1-4 win)
+	fourth_place := players_by_position[3]
+	g.Tributes = append(g.Tributes, Tribute_Info{
+		From_Seat: fourth_place,
+		To_Seat:   first_place,
+	})
+
+	// If double win (1st and 2nd on same team): 3rd place gives to 2nd place
+	if g.is_double_win() {
+		second_place := players_by_position[1]
+		third_place := players_by_position[2]
 		g.Tributes = append(g.Tributes, Tribute_Info{
-			From_Seat: last_loser,
-			To_Seat:   first_winner,
+			From_Seat: third_place,
+			To_Seat:   second_place,
 		})
 	}
 
-	if g.is_double_win() && second_last_loser != -1 && second_winner != -1 {
-		g.Tributes = append(g.Tributes, Tribute_Info{
-			From_Seat: second_last_loser,
-			To_Seat:   second_winner,
-		})
-	}
-
-	g.Tribute_Leader = first_winner
+	g.Tribute_Leader = first_place
 }
 
 func (g *Game_State) is_double_win() bool {
@@ -171,11 +157,44 @@ func (g *Game_State) Get_Tribute_Info(seat int) *Tribute_Info {
 
 func (g *Game_State) Mark_Tribute_Done(seat int) {
 	for i := range g.Tributes {
-		if g.Tributes[i].From_Seat == seat {
+		if g.Tributes[i].From_Seat == seat && !g.Tributes[i].Done {
 			g.Tributes[i].Done = true
 			break
 		}
 	}
+}
+
+func (g *Game_State) Mark_Tribute_Done_With_Value(seat int, card_value int) {
+	for i := range g.Tributes {
+		if g.Tributes[i].From_Seat == seat && !g.Tributes[i].Done {
+			g.Tributes[i].Done = true
+			g.Tributes[i].Card_Value = card_value
+			break
+		}
+	}
+}
+
+// Determine_First_Player returns the seat that should play first.
+// Per Guan Dan rules: the player who pays the higher ranked tribute goes first.
+// If equal tributes or no tributes, the first finisher from previous hand goes first.
+func (g *Game_State) Determine_First_Player() int {
+	if len(g.Tributes) == 0 {
+		// No tributes - first finisher goes first
+		return g.Tribute_Leader
+	}
+
+	// Find the tribute with the highest card value
+	highest_value := -1
+	highest_seat := g.Tribute_Leader // Default to first finisher
+
+	for _, t := range g.Tributes {
+		if t.Card_Value > highest_value {
+			highest_value = t.Card_Value
+			highest_seat = t.From_Seat
+		}
+	}
+
+	return highest_seat
 }
 
 func (g *Game_State) All_Tributes_Done() bool {
@@ -187,12 +206,40 @@ func (g *Game_State) All_Tributes_Done() bool {
 	return true
 }
 
+func (g *Game_State) All_Returns_Done() bool {
+	for _, t := range g.Tributes {
+		if !t.Return_Done {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *Game_State) Get_Pending_Return(seat int) *Tribute_Info {
+	for i := range g.Tributes {
+		// The winner (To_Seat) needs to return a card, and tribute must be done first
+		if g.Tributes[i].To_Seat == seat && g.Tributes[i].Done && !g.Tributes[i].Return_Done {
+			return &g.Tributes[i]
+		}
+	}
+	return nil
+}
+
+func (g *Game_State) Mark_Return_Done(seat int) {
+	for i := range g.Tributes {
+		if g.Tributes[i].To_Seat == seat && g.Tributes[i].Done && !g.Tributes[i].Return_Done {
+			g.Tributes[i].Return_Done = true
+			break
+		}
+	}
+}
+
 func (g *Game_State) Reset_Hand() {
 	g.Current_Lead = Combination{Type: Comb_Invalid}
 	g.Lead_Player = 0
 	g.Pass_Count = 0
 	g.Finish_Order = g.Finish_Order[:0]
-	g.Tributes = nil
+	// Don't clear Tributes here - they're set up before dealing and processed after
 
 	winning_team := g.Tribute_Leader % 2
 	g.Level = Rank(g.Team_Levels[winning_team])

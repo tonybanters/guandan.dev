@@ -70,6 +70,8 @@ export type Msg_Type =
   | 'tribute'
   | 'tribute_give'
   | 'tribute_recv'
+  | 'tribute_return'
+  | 'tribute_return_give'
   | 'game_end'
   | 'error'
   | 'player_joined'
