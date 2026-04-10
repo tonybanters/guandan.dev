@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Black_Joker, Rank_Red_Joker } from '../game/types'
 import { Hand } from './Hand'
-import { Card } from './Card'
+import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
 
 interface Player_Play {
@@ -50,7 +50,7 @@ interface Game_Props {
   player_plays: Record<number, Player_Play>
   leading_seat: number | null
   // Tribute mode
-  is_tribute_mode?: boolean
+  is_tribute_mode?: 'give' | 'return' | false
   tribute_target_name?: string
   on_tribute?: () => void
   received_tribute_card?: Card_Type | null
@@ -459,8 +459,9 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
     )
   }
 
-  // Less overlap for played cards so all cards are visible
-  const card_overlap = is_mobile ? -20 : -28
+  const table_size = is_mobile ? 'small' as const : 'normal' as const
+  const table_cfg = CARD_CONFIG.table[table_size]
+  const card_overlap = -(table_cfg.width - table_cfg.h_visible)
 
   // Sort cards by rank for display
   const sorted_cards = sort_played_cards(play.cards)
@@ -489,8 +490,8 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
               level={level}
               selected={false}
               on_click={() => {}}
-              size="small"
-              label_position="left"
+              size={table_size}
+              context="table"
             />
           </motion.div>
         ))}
@@ -550,8 +551,9 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
     )
   }
 
-  // Less overlap for played cards so all cards are visible
-  const card_overlap = is_mobile ? -20 : -28
+  const table_size = is_mobile ? 'small' as const : 'normal' as const
+  const table_cfg = CARD_CONFIG.table[table_size]
+  const card_overlap = -(table_cfg.width - table_cfg.h_visible)
 
   // Sort cards by rank for display
   const sorted_cards = sort_played_cards(play.cards)
@@ -579,8 +581,8 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
               level={level}
               selected={false}
               on_click={() => {}}
-              size="small"
-              label_position="left"
+              size={table_size}
+              context="table"
             />
           </motion.div>
         ))}

@@ -183,12 +183,13 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
     // Check normal consecutive (no wilds)
     if (by_rank.size === n) {
       const ranks = sorted.map(c => c.Rank)
-      if (is_consecutive(ranks)) {
+      const high = consecutive_high_rank(ranks)
+      if (high !== null) {
         // Check if straight flush
         if (sorted.every(c => c.Suit === sorted[0].Suit)) {
-          return { type: 'straight_flush', cards, value: get_card_value(sorted[n-1], level) + 500 + n * 10 }
+          return { type: 'straight_flush', cards, value: get_rank_value(high, level) + 500 + n * 10 }
         }
-        return { type: 'straight', cards, value: get_card_value(sorted[n-1], level) }
+        return { type: 'straight', cards, value: get_rank_value(high, level) }
       }
     }
 
@@ -202,21 +203,22 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
 
       // Check if non-wild cards + wilds can form a straight
       // Need n consecutive ranks, can use wilds to fill gaps
-      for (let start = 1; start <= 12 - n + 1; start++) {
+      // Start at -1 to handle A-low wrapping (A-2-3-4-5)
+      for (let start = -1; start <= 12 - n + 1; start++) {
         let gaps = 0
         for (let i = 0; i < n; i++) {
-          if (!unique_ranks.has(start + i)) {
+          const rank = start + i === -1 ? 12 : start + i
+          if (!unique_ranks.has(rank)) {
             gaps++
           }
         }
         if (gaps <= wilds.length && gaps + unique_ranks.size === n) {
-          // Found valid straight with wild(s)
-          // Check if it's a straight flush - all non-wild cards must be same suit
+          const high_rank = start + n - 1
           const flush_suit = non_wild[0].Suit
           if (non_wild.every(c => c.Suit === flush_suit)) {
-            return { type: 'straight_flush', cards, value: start + n - 1 + 500 + n * 10 }
+            return { type: 'straight_flush', cards, value: get_rank_value(high_rank, level) + 500 + n * 10 }
           }
-          return { type: 'straight', cards, value: start + n - 1 }
+          return { type: 'straight', cards, value: get_rank_value(high_rank, level) }
         }
       }
     }
@@ -226,9 +228,10 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
   if (n >= 4 && n % 2 === 0) {
     const pairs = Array.from(by_rank.entries())
     if (pairs.every(([_, arr]) => arr.length === 2)) {
-      const ranks = pairs.map(([r, _]) => r).sort((a, b) => a - b)
-      if (is_consecutive(ranks)) {
-        return { type: 'tube', cards, value: get_rank_value(ranks[ranks.length - 1], level) }
+      const ranks = pairs.map(([r, _]) => r)
+      const high = consecutive_high_rank(ranks)
+      if (high !== null) {
+        return { type: 'tube', cards, value: get_rank_value(high, level) }
       }
     }
   }
@@ -237,9 +240,10 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
   if (n >= 6 && n % 3 === 0) {
     const triples = Array.from(by_rank.entries())
     if (triples.every(([_, arr]) => arr.length === 3)) {
-      const ranks = triples.map(([r, _]) => r).sort((a, b) => a - b)
-      if (is_consecutive(ranks)) {
-        return { type: 'plate', cards, value: get_rank_value(ranks[ranks.length - 1], level) }
+      const ranks = triples.map(([r, _]) => r)
+      const high = consecutive_high_rank(ranks)
+      if (high !== null) {
+        return { type: 'plate', cards, value: get_rank_value(high, level) }
       }
     }
   }
@@ -247,14 +251,27 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
   return null
 }
 
-function is_consecutive(ranks: number[]): boolean {
+// Returns the effective high rank of a consecutive sequence, or null if not consecutive.
+// Handles A-low wrapping (e.g., A-2-3-4-5 returns rank 3, i.e. 5).
+function consecutive_high_rank(ranks: number[]): number | null {
   const sorted = [...ranks].sort((a, b) => a - b)
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] !== sorted[i - 1] + 1) return false
+
+  const is_run = (arr: number[]) => {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] !== arr[i - 1] + 1) return false
+    }
+    return true
   }
-  // Can't include 2 (rank 0) in straights
-  if (sorted.includes(0)) return false
-  return true
+
+  if (is_run(sorted)) return sorted[sorted.length - 1]
+
+  // A-low wrapping: treat A (rank 12) as -1
+  if (sorted.includes(12)) {
+    const wrapped = sorted.map(r => r === 12 ? -1 : r).sort((a, b) => a - b)
+    if (is_run(wrapped)) return wrapped[wrapped.length - 1]
+  }
+
+  return null
 }
 
 function get_card_value(card: Card, level: Rank): number {

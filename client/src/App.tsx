@@ -200,6 +200,18 @@ export default function App() {
       setTimeout(() => set_received_tribute_card(null), 2500)
     })
 
+    const unsub_tribute_give_ok = on('tribute_give_ok', (msg: Message) => {
+      const payload = msg.payload as { card_id: number }
+      set_tribute_target(null)
+      set_hand((prev) => prev.filter((c) => c.Id !== payload.card_id))
+    })
+
+    const unsub_tribute_return_ok = on('tribute_return_ok', (msg: Message) => {
+      const payload = msg.payload as { card_id: number }
+      set_return_target(null)
+      set_hand((prev) => prev.filter((c) => c.Id !== payload.card_id))
+    })
+
     const unsub_reconnect_success = on('reconnect_success', (msg: Message) => {
       const payload = msg.payload as Reconnect_Success_Payload
       // Restore full game state from reconnection
@@ -252,6 +264,8 @@ export default function App() {
       unsub_tribute()
       unsub_tribute_return()
       unsub_tribute_recv()
+      unsub_tribute_give_ok()
+      unsub_tribute_return_ok()
       unsub_reconnect_success()
       unsub_player_disconnected()
       unsub_player_reconnected()
@@ -333,14 +347,10 @@ export default function App() {
 
   const handle_give_tribute = useCallback((card_id: number) => {
     send({ type: 'tribute_give', payload: { card_id } })
-    set_tribute_target(null)
-    set_hand((prev) => prev.filter((c) => c.Id !== card_id))
   }, [send])
 
   const handle_give_return = useCallback((card_id: number) => {
     send({ type: 'tribute_return_give', payload: { card_id } })
-    set_return_target(null)
-    set_hand((prev) => prev.filter((c) => c.Id !== card_id))
   }, [send])
 
   const handle_tribute_play = useCallback(() => {
@@ -399,7 +409,7 @@ export default function App() {
         last_play_seat={last_play_seat}
         player_plays={player_plays}
         leading_seat={leading_seat}
-        is_tribute_mode={tribute_target !== null || return_target !== null}
+        is_tribute_mode={tribute_target !== null ? 'give' : return_target !== null ? 'return' : false}
         tribute_target_name={tribute_target !== null ? (players_map[tribute_target] || `Player ${tribute_target + 1}`) : (return_target !== null ? (players_map[return_target] || `Player ${return_target + 1}`) : undefined)}
         on_tribute={handle_tribute_play}
         received_tribute_card={received_tribute_card}

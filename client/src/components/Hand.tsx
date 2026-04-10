@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card as Card_Type, Rank, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades } from '../game/types'
-import { Card } from './Card'
+import { Card as Card_Type, Rank, Rank_Ten, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades, is_wild } from '../game/types'
+import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
 import { detect_combo } from '../game/combos'
 
@@ -17,7 +17,7 @@ interface Hand_Props {
   on_pass: () => void
   is_my_turn: boolean
   can_pass: boolean
-  is_tribute_mode?: boolean
+  is_tribute_mode?: 'give' | 'return' | false
 }
 
 interface Column {
@@ -118,10 +118,12 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
   // Card lookup
   const card_by_id = new Map(cards.map(c => [c.Id, c]))
 
-  const card_width = is_mobile ? 48 : 60
-  const card_height = is_mobile ? 67 : 84
-  const v_overlap = is_mobile ? 18 : 28
-  const h_gap = is_mobile ? 3 : 4
+  const card_size = is_mobile ? 'small' as const : 'normal' as const
+  const cfg = CARD_CONFIG.hand[card_size]
+  const card_width = cfg.width
+  const card_height = cfg.height
+  const v_overlap = cfg.v_overlap
+  const h_visible = cfg.h_visible
 
   // Check if selected cards form a valid combo
   const is_valid_pile = useMemo(() => {
@@ -299,13 +301,14 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     }
   }
 
-  // Check if selected card is valid for tribute (rank <= 10)
   const is_valid_tribute_selection = useMemo(() => {
     if (selected_ids.size !== 1) return false
-    const card_id = Array.from(selected_ids)[0]
-    const card = cards.find(c => c.Id === card_id)
-    return card ? card.Rank <= 10 : false
-  }, [selected_ids, cards])
+    const card = cards.find(c => c.Id === Array.from(selected_ids)[0])
+    if (!card) return false
+    if (is_tribute_mode === 'give') return !is_wild(card, level)
+    if (is_tribute_mode === 'return') return card.Rank <= Rank_Ten && !is_wild(card, level)
+    return false
+  }, [selected_ids, cards, level, is_tribute_mode])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
@@ -330,10 +333,11 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           userSelect: 'none',
         }}
       >
-        <div style={{ display: 'flex', gap: h_gap, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
           {columns.map((col, col_idx) => {
             const col_cards = col.card_ids.map(id => card_by_id.get(id)!).filter(Boolean)
             const col_height = card_height + (col_cards.length - 1) * v_overlap
+            const is_last_col = col_idx === columns.length - 1
 
             return (
               <div
@@ -345,6 +349,8 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                   height: col_height,
                   borderRadius: 4,
                   flexShrink: 0,
+                  marginRight: is_last_col ? 0 : -(card_width - h_visible),
+                  zIndex: col_idx,
                 }}
               >
                 <AnimatePresence>
@@ -376,7 +382,8 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                           level={level}
                           selected={selected_ids.has(card.Id)}
                           on_click={() => handle_card_click(card)}
-                          size={is_mobile ? "small" : "normal"}
+                          size={card_size}
+                          context="hand"
                         />
                       </motion.div>
                     )
