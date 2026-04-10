@@ -17,20 +17,23 @@ const (
 )
 
 type Client struct {
-	id     string
-	name   string
-	room   *Room
-	conn   *websocket.Conn
-	send   chan []byte
-	mu     sync.Mutex
-	is_bot bool
+	id            string
+	name          string
+	session_token string
+	room          *Room
+	conn          *websocket.Conn
+	send          chan []byte
+	mu            sync.Mutex
+	is_bot        bool
+	disconnected  bool
 }
 
 func new_client(id string, conn *websocket.Conn) *Client {
 	return &Client{
-		id:   id,
-		conn: conn,
-		send: make(chan []byte, 256),
+		id:            id,
+		session_token: generate_id(), // Unique session token for reconnection
+		conn:          conn,
+		send:          make(chan []byte, 256),
 	}
 }
 
@@ -117,6 +120,8 @@ func (c *Client) handle_message(hub *Hub, msg *protocol.Message) {
 		c.handle_create_room(hub, msg)
 	case protocol.Msg_Join_Room:
 		c.handle_join_room(hub, msg)
+	case protocol.Msg_Reconnect:
+		c.handle_reconnect(hub, msg)
 	case protocol.Msg_Play_Cards:
 		c.handle_play_cards(msg)
 	case protocol.Msg_Pass:
@@ -159,6 +164,24 @@ func (c *Client) handle_join_room(hub *Hub, msg *protocol.Message) {
 		return
 	}
 	room.join <- c
+}
+
+func (c *Client) handle_reconnect(hub *Hub, msg *protocol.Message) {
+	payload_bytes, _ := json.Marshal(msg.Payload)
+	var payload protocol.Reconnect_Payload
+	json.Unmarshal(payload_bytes, &payload)
+
+	room := hub.get_room(payload.Room_Id)
+	if room == nil {
+		c.send_error("room not found")
+		return
+	}
+
+	// Try to reconnect using session token
+	room.reconnect <- Reconnect_Request{
+		new_client:    c,
+		session_token: payload.Session_Token,
+	}
 }
 
 func (c *Client) handle_play_cards(msg *protocol.Message) {

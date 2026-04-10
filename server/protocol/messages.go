@@ -25,6 +25,10 @@ const (
 	Msg_Player_Joined Msg_Type = "player_joined"
 	Msg_Player_Left   Msg_Type = "player_left"
 	Msg_Fill_Bots     Msg_Type = "fill_bots"
+	Msg_Reconnect     Msg_Type = "reconnect"         // Client -> server: Attempt to reconnect
+	Msg_Reconnect_Success Msg_Type = "reconnect_success" // Server -> client: Reconnection successful with game state
+	Msg_Player_Disconnected Msg_Type = "player_disconnected" // Server -> clients: Player temporarily disconnected
+	Msg_Player_Reconnected  Msg_Type = "player_reconnected"  // Server -> clients: Player reconnected
 )
 
 type Message struct {
@@ -42,10 +46,11 @@ type Create_Room_Payload struct {
 }
 
 type Room_State_Payload struct {
-	Room_Id     string        `json:"room_id"`
-	Players     []Player_Info `json:"players"`
-	Game_Active bool          `json:"game_active"`
-	Your_Id     string        `json:"your_id"`
+	Room_Id       string        `json:"room_id"`
+	Players       []Player_Info `json:"players"`
+	Game_Active   bool          `json:"game_active"`
+	Your_Id       string        `json:"your_id"`
+	Session_Token string        `json:"session_token,omitempty"`
 }
 
 type Player_Info struct {
@@ -111,4 +116,33 @@ type Game_End_Payload struct {
 
 type Error_Payload struct {
 	Message string `json:"message"`
+}
+
+type Reconnect_Payload struct {
+	Session_Token string `json:"session_token"`
+	Room_Id       string `json:"room_id"`
+}
+
+type Reconnect_Success_Payload struct {
+	Session_Token string        `json:"session_token"`
+	Room_Id       string        `json:"room_id"`
+	Players       []Player_Info `json:"players"`
+	Your_Id       string        `json:"your_id"`
+	Seat          int           `json:"seat"`
+	Cards         []game.Card   `json:"cards"`
+	Level         game.Rank     `json:"level"`
+	Current_Turn  int           `json:"current_turn"`
+	Can_Pass      bool          `json:"can_pass"`
+	Table_Cards   []game.Card   `json:"table_cards"`
+	Combo_Type    string        `json:"combo_type"`
+	Card_Counts   [4]int        `json:"card_counts"`
+	Team_Levels   [2]int        `json:"team_levels"`
+	Leading_Seat  int           `json:"leading_seat"`
+	Game_Active   bool          `json:"game_active"`
+}
+
+type Player_Status_Payload struct {
+	Player_Id string `json:"player_id"`
+	Seat      int    `json:"seat"`
+	Name      string `json:"name"`
 }

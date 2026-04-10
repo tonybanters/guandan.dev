@@ -43,9 +43,37 @@ interface Error_Payload {
   message: string
 }
 
+interface Reconnect_Success_Payload {
+  session_token: string
+  room_id: string
+  players: Player_Info[]
+  your_id: string
+  seat: number
+  cards: Card[]
+  level: Rank
+  current_turn: number
+  can_pass: boolean
+  table_cards: Card[]
+  combo_type: string
+  card_counts: [number, number, number, number]
+  team_levels: [number, number]
+  leading_seat: number
+  game_active: boolean
+}
+
+function get_ws_url(): string {
+  // In production, use the configured URL
+  if (import.meta.env.VITE_WS_URL && import.meta.env.PROD) {
+    return import.meta.env.VITE_WS_URL
+  }
+  // In development, use the Vite proxy so it works from any device on the network
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}/ws`
+}
+
 export default function App() {
-  const ws_url = import.meta.env.VITE_WS_URL
-  const { connected, send, on } = use_websocket(ws_url)
+  const ws_url = get_ws_url()
+  const { connected, reconnecting, send, on } = use_websocket(ws_url)
 
   const [room_id, set_room_id] = useState<string | null>(null)
   const [players, set_players] = useState<Player_Info[]>([])
@@ -172,6 +200,48 @@ export default function App() {
       setTimeout(() => set_received_tribute_card(null), 2500)
     })
 
+    const unsub_reconnect_success = on('reconnect_success', (msg: Message) => {
+      const payload = msg.payload as Reconnect_Success_Payload
+      // Restore full game state from reconnection
+      set_room_id(payload.room_id)
+      set_players(payload.players)
+      set_game_active(payload.game_active)
+      set_my_seat(payload.seat)
+      set_hand(sort_cards(payload.cards, payload.level))
+      set_level(payload.level)
+      set_current_turn(payload.current_turn)
+      set_can_pass(payload.can_pass)
+      set_table_cards(payload.table_cards || [])
+      set_combo_type(payload.combo_type || '')
+      set_player_card_counts(payload.card_counts)
+      set_team_levels(payload.team_levels)
+      set_leading_seat(payload.leading_seat)
+      set_selected_ids(new Set())
+      set_player_plays({})
+
+      const pmap: Record<number, string> = {}
+      payload.players.forEach((p) => {
+        pmap[p.seat] = p.name
+      })
+      set_players_map(pmap)
+    })
+
+    const unsub_player_disconnected = on('player_disconnected', (msg: Message) => {
+      const payload = msg.payload as { player_id: string; seat: number; name: string }
+      set_players_map((prev) => ({
+        ...prev,
+        [payload.seat]: `${prev[payload.seat] || payload.name} (disconnected)`,
+      }))
+    })
+
+    const unsub_player_reconnected = on('player_reconnected', (msg: Message) => {
+      const payload = msg.payload as { player_id: string; seat: number; name: string }
+      set_players_map((prev) => ({
+        ...prev,
+        [payload.seat]: payload.name,
+      }))
+    })
+
     return () => {
       unsub_room_state()
       unsub_deal()
@@ -182,6 +252,9 @@ export default function App() {
       unsub_tribute()
       unsub_tribute_return()
       unsub_tribute_recv()
+      unsub_reconnect_success()
+      unsub_player_disconnected()
+      unsub_player_reconnected()
     }
   }, [on, level])
 
@@ -281,10 +354,10 @@ export default function App() {
     set_selected_ids(new Set())
   }, [selected_ids, tribute_target, return_target, handle_give_tribute, handle_give_return])
 
-  if (!connected) {
+  if (!connected || reconnecting) {
     return (
       <div style={styles.connecting}>
-        <div>Connecting...</div>
+        <div>{reconnecting ? 'Reconnecting...' : 'Connecting...'}</div>
       </div>
     )
   }

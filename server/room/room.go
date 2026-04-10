@@ -18,31 +18,48 @@ type Tribute_Action struct {
 	card_id int
 }
 
+type Reconnect_Request struct {
+	new_client    *Client
+	session_token string
+}
+
+type Disconnected_Player struct {
+	session_token string
+	seat          int
+	name          string
+}
+
 type Room struct {
-	id             string
-	clients        [4]*Client
-	game           *game.Game_State
-	join           chan *Client
-	leave          chan *Client
-	play           chan Play_Action
-	pass           chan *Client
-	tribute        chan Tribute_Action
-	tribute_return chan Tribute_Action
-	fill_bots      chan *Client
-	bot_turn       chan int
+	id                   string
+	clients              [4]*Client
+	game                 *game.Game_State
+	join                 chan *Client
+	leave                chan *Client
+	play                 chan Play_Action
+	pass                 chan *Client
+	tribute              chan Tribute_Action
+	tribute_return       chan Tribute_Action
+	fill_bots            chan *Client
+	bot_turn             chan int
+	reconnect            chan Reconnect_Request
+	expire_disconnected  chan string // session_token
+	disconnected_players map[string]*Disconnected_Player // session_token -> player info
 }
 
 func new_room(id string) *Room {
 	return &Room{
-		id:             id,
-		join:           make(chan *Client),
-		leave:          make(chan *Client),
-		play:           make(chan Play_Action),
-		pass:           make(chan *Client),
-		tribute:        make(chan Tribute_Action),
-		tribute_return: make(chan Tribute_Action),
-		fill_bots:      make(chan *Client),
-		bot_turn:       make(chan int),
+		id:                   id,
+		join:                 make(chan *Client),
+		leave:                make(chan *Client),
+		play:                 make(chan Play_Action),
+		pass:                 make(chan *Client),
+		tribute:              make(chan Tribute_Action),
+		tribute_return:       make(chan Tribute_Action),
+		fill_bots:            make(chan *Client),
+		bot_turn:             make(chan int),
+		reconnect:            make(chan Reconnect_Request),
+		expire_disconnected:  make(chan string),
+		disconnected_players: make(map[string]*Disconnected_Player),
 	}
 }
 
@@ -53,6 +70,10 @@ func (r *Room) run() {
 			r.handle_join(client)
 		case client := <-r.leave:
 			r.handle_leave(client)
+		case req := <-r.reconnect:
+			r.handle_reconnect(req)
+		case token := <-r.expire_disconnected:
+			r.handle_expire_disconnected(token)
 		case action := <-r.play:
 			r.handle_play(action)
 		case client := <-r.pass:
@@ -87,12 +108,59 @@ func (r *Room) handle_join(client *Client) {
 }
 
 func (r *Room) handle_leave(client *Client) {
+	// Skip if already disconnected (prevents double-processing)
+	if client.disconnected {
+		return
+	}
+
+	seat := -1
 	for i := range 4 {
 		if r.clients[i] == client {
-			r.clients[i] = nil
+			seat = i
 			break
 		}
 	}
+	if seat == -1 {
+		return
+	}
+
+	// If game is active, mark as disconnected instead of removing
+	if r.game != nil && !client.is_bot {
+		log.Printf("[DEBUG] handle_leave: player %s (seat %d) disconnected during game, saving session", client.name, seat)
+
+		// Save disconnected player info for reconnection
+		r.disconnected_players[client.session_token] = &Disconnected_Player{
+			session_token: client.session_token,
+			seat:          seat,
+			name:          client.name,
+		}
+
+		// Mark client as disconnected but keep in seat
+		// Don't touch conn or send - read_pump's defer already closed the conn,
+		// and write_pump will exit on its next ping attempt
+		client.disconnected = true
+
+		// Notify other players
+		r.broadcast(&protocol.Message{
+			Type: protocol.Msg_Player_Disconnected,
+			Payload: protocol.Player_Status_Payload{
+				Player_Id: client.id,
+				Seat:      seat,
+				Name:      client.name,
+			},
+		})
+
+		// Set a timeout to fully remove the player if they don't reconnect
+		go func(token string, s int) {
+			time.Sleep(60 * time.Second) // 60 second reconnect window
+			r.expire_disconnected <- token
+		}(client.session_token, seat)
+
+		return
+	}
+
+	// No game active - fully remove the player
+	r.clients[seat] = nil
 	client.room = nil
 
 	r.broadcast(&protocol.Message{
@@ -104,6 +172,134 @@ func (r *Room) handle_leave(client *Client) {
 	})
 
 	r.broadcast_room_state()
+}
+
+func (r *Room) handle_reconnect(req Reconnect_Request) {
+	log.Printf("[DEBUG] handle_reconnect: session_token=%s", req.session_token)
+
+	// Find the disconnected player
+	dp, exists := r.disconnected_players[req.session_token]
+	if !exists {
+		req.new_client.send_error("session not found or expired")
+		return
+	}
+
+	// Get the old client from the seat
+	old_client := r.clients[dp.seat]
+	if old_client == nil {
+		req.new_client.send_error("seat no longer available")
+		delete(r.disconnected_players, req.session_token)
+		return
+	}
+
+	// Transfer identity from old client to the new connection
+	// (new client already has its own goroutines running)
+	req.new_client.id = old_client.id
+	req.new_client.name = dp.name
+	req.new_client.session_token = old_client.session_token
+	req.new_client.room = r
+
+	// Replace old client with new one in the seat
+	r.clients[dp.seat] = req.new_client
+
+	// Remove from disconnected list
+	delete(r.disconnected_players, req.session_token)
+
+	log.Printf("[DEBUG] handle_reconnect: player %s reconnected to seat %d", dp.name, dp.seat)
+
+	// Send full game state to reconnected player
+	r.send_reconnect_state(req.new_client, dp.seat)
+
+	// Notify other players
+	r.broadcast(&protocol.Message{
+		Type: protocol.Msg_Player_Reconnected,
+		Payload: protocol.Player_Status_Payload{
+			Player_Id: req.new_client.id,
+			Seat:      dp.seat,
+			Name:      dp.name,
+		},
+	})
+}
+
+func (r *Room) handle_expire_disconnected(token string) {
+	dp, exists := r.disconnected_players[token]
+	if !exists {
+		return // Already reconnected
+	}
+
+	log.Printf("[DEBUG] handle_expire_disconnected: player at seat %d timed out", dp.seat)
+
+	// Fully remove the player
+	if r.clients[dp.seat] != nil {
+		r.clients[dp.seat] = nil
+	}
+	delete(r.disconnected_players, token)
+
+	// Notify other players
+	r.broadcast(&protocol.Message{
+		Type: protocol.Msg_Player_Left,
+		Payload: protocol.Player_Info{
+			Name: dp.name,
+			Seat: dp.seat,
+		},
+	})
+}
+
+func (r *Room) send_reconnect_state(client *Client, seat int) {
+	if r.game == nil {
+		// No active game, just send room state
+		r.broadcast_room_state()
+		return
+	}
+
+	// Build card counts
+	card_counts := [4]int{}
+	for i := 0; i < 4; i++ {
+		card_counts[i] = len(r.game.Hands[i])
+	}
+
+	// Build players list
+	players := make([]protocol.Player_Info, 0)
+	for i, c := range r.clients {
+		if c != nil {
+			players = append(players, protocol.Player_Info{
+				Id:   c.id,
+				Name: c.name,
+				Seat: i,
+				Team: i % 2,
+			})
+		}
+	}
+
+	// Get current table cards and combo type
+	var table_cards []game.Card
+	combo_type := ""
+	if r.game.Current_Lead.Type != game.Comb_Invalid {
+		table_cards = r.game.Current_Lead.Cards
+		combo_type = combo_type_name(r.game.Current_Lead.Type)
+	}
+
+	// Send reconnect success with full game state
+	client.send_message(&protocol.Message{
+		Type: protocol.Msg_Reconnect_Success,
+		Payload: protocol.Reconnect_Success_Payload{
+			Session_Token: client.session_token,
+			Room_Id:       r.id,
+			Players:       players,
+			Your_Id:       client.id,
+			Seat:          seat,
+			Cards:         r.game.Hands[seat],
+			Level:         r.game.Level,
+			Current_Turn:  r.game.Current_Turn,
+			Can_Pass:      r.game.Current_Lead.Type != game.Comb_Invalid,
+			Table_Cards:   table_cards,
+			Combo_Type:    combo_type,
+			Card_Counts:   card_counts,
+			Team_Levels:   r.game.Team_Levels,
+			Leading_Seat:  r.game.Lead_Player,
+			Game_Active:   true,
+		},
+	})
 }
 
 func (r *Room) handle_play(action Play_Action) {
@@ -195,8 +391,12 @@ func (r *Room) handle_pass(client *Client) {
 		},
 	})
 
-	if r.game.Pass_Count >= 3 {
-		log.Printf("[DEBUG] handle_pass: 3 passes, resetting lead. Lead_Player=%d", r.game.Lead_Player)
+	// Calculate how many passes needed: all active players except the lead player
+	active_players := 4 - len(r.game.Finish_Order)
+	passes_needed := active_players - 1
+
+	if r.game.Pass_Count >= passes_needed {
+		log.Printf("[DEBUG] handle_pass: %d passes (needed %d), resetting lead. Lead_Player=%d", r.game.Pass_Count, passes_needed, r.game.Lead_Player)
 		r.game.Current_Lead = game.Combination{Type: game.Comb_Invalid}
 
 		// After everyone passes, the lead player leads again
@@ -733,7 +933,7 @@ func (r *Room) send_turn_notification() {
 
 func (r *Room) broadcast(msg *protocol.Message) {
 	for _, client := range r.clients {
-		if client != nil {
+		if client != nil && !client.disconnected {
 			client.send_message(msg)
 		}
 	}
@@ -742,7 +942,7 @@ func (r *Room) broadcast(msg *protocol.Message) {
 func (r *Room) broadcast_room_state() {
 	players := make([]protocol.Player_Info, 0)
 	for i, c := range r.clients {
-		if c != nil {
+		if c != nil && !c.disconnected {
 			players = append(players, protocol.Player_Info{
 				Id:   c.id,
 				Name: c.name,
@@ -753,14 +953,15 @@ func (r *Room) broadcast_room_state() {
 	}
 
 	for _, client := range r.clients {
-		if client != nil {
+		if client != nil && !client.disconnected {
 			client.send_message(&protocol.Message{
 				Type: protocol.Msg_Room_State,
 				Payload: protocol.Room_State_Payload{
-					Room_Id:     r.id,
-					Players:     players,
-					Game_Active: r.game != nil,
-					Your_Id:     client.id,
+					Room_Id:       r.id,
+					Players:       players,
+					Game_Active:   r.game != nil,
+					Your_Id:       client.id,
+					Session_Token: client.session_token,
 				},
 			})
 		}

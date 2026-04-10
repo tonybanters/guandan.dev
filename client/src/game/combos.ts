@@ -192,25 +192,31 @@ export function detect_combo(cards: Card[], level: Rank): Detected_Combo | null 
       }
     }
 
-    // Check with level♥ as wild card (level♥ can fill one gap)
-    const has_wild_level = sorted.some(c => c.Rank === level && c.Suit === 0) // Suit_Hearts=0
-    if (has_wild_level && by_rank.size === n - 1) {
-      // Exclude the level♥ and check if remaining cards + one gap can form a straight
-      const non_wild = sorted.filter(c => !(c.Rank === level && c.Suit === 0))
-      const ranks = non_wild.map(c => c.Rank)
+    // Check with level♥ as wild card (level♥ can fill one or more gaps)
+    const wilds = sorted.filter(c => c.Rank === level && c.Suit === 0) // Suit_Hearts=0
+    const non_wild = sorted.filter(c => !(c.Rank === level && c.Suit === 0))
 
-      // Try inserting the wild card at different positions
-      for (let i = 0; i <= ranks.length; i++) {
-        // Try each possible rank the wild could fill
-        for (let wild_rank = 1; wild_rank <= 12; wild_rank++) {
-          const test_ranks = [...ranks.slice(0, i), wild_rank, ...ranks.slice(i)]
-          if (is_consecutive(test_ranks)) {
-            // Found valid straight with wild
-            if (sorted.every(c => c.Suit === sorted[0].Suit || (c.Rank === level && c.Suit === 0))) {
-              return { type: 'straight_flush', cards, value: Math.max(...ranks) + 500 + n * 10 }
-            }
-            return { type: 'straight', cards, value: Math.max(...ranks) }
+    if (wilds.length > 0 && non_wild.length > 0) {
+      const ranks = non_wild.map(c => c.Rank)
+      const unique_ranks = new Set<number>(ranks)
+
+      // Check if non-wild cards + wilds can form a straight
+      // Need n consecutive ranks, can use wilds to fill gaps
+      for (let start = 1; start <= 12 - n + 1; start++) {
+        let gaps = 0
+        for (let i = 0; i < n; i++) {
+          if (!unique_ranks.has(start + i)) {
+            gaps++
           }
+        }
+        if (gaps <= wilds.length && gaps + unique_ranks.size === n) {
+          // Found valid straight with wild(s)
+          // Check if it's a straight flush - all non-wild cards must be same suit
+          const flush_suit = non_wild[0].Suit
+          if (non_wild.every(c => c.Suit === flush_suit)) {
+            return { type: 'straight_flush', cards, value: start + n - 1 + 500 + n * 10 }
+          }
+          return { type: 'straight', cards, value: start + n - 1 }
         }
       }
     }

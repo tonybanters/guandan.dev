@@ -167,49 +167,79 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     set_custom_columns(new Map())
   }
 
-  // Check if a specific suit has a straight flush (considering level♥ as wild card)
-  const has_straight_flush_for_suit = (suit: number): boolean => {
+  // Track which straight flush index is selected for each suit
+  const sf_index_ref = useRef<Map<number, number>>(new Map())
+
+  // Find all valid 5-card straight flushes for a suit, sorted by starting rank
+  const find_straight_flushes_for_suit = (suit: number): Card_Type[][] => {
     const suit_cards = cards.filter(c => c.Suit === suit && c.Suit < 4) // Exclude jokers
-    // The level card in hearts suit is wild
-    const wild_count = cards.filter(c => c.Rank === level && c.Suit === Suit_Hearts).length
+    const wild_cards = cards.filter(c => c.Rank === level && c.Suit === Suit_Hearts)
 
-    if (suit_cards.length + wild_count < 5) return false
+    const results: Card_Type[][] = []
 
-    // Get non-wild cards of this suit, sorted by rank
-    const non_wild = suit_cards.filter(c => !(c.Rank === level && c.Suit === Suit_Hearts)).sort((a, b) => a.Rank - b.Rank)
-    if (non_wild.length === 0) return false
+    // Try each possible starting rank (excluding 2/rank 0 since straights can't include 2)
+    for (let start = 1; start <= 12 - 4; start++) { // 3 through 10 (ranks 1-8)
+      const needed_ranks = [start, start + 1, start + 2, start + 3, start + 4]
+      const sf_cards: Card_Type[] = []
+      let wilds_used = 0
 
-    // Try to find 5 consecutive ranks in this suit, using wilds to fill gaps
-    for (let start = 0; start <= 12 - 4; start++) { // 2 (0) through Ace (12)
-      let gaps = 0
-      for (let rank = start; rank < start + 5; rank++) {
-        if (!non_wild.some(c => c.Rank === rank)) {
-          gaps++
+      for (const rank of needed_ranks) {
+        const card = suit_cards.find(c => c.Rank === rank)
+        if (card) {
+          sf_cards.push(card)
+        } else if (wilds_used < wild_cards.length) {
+          sf_cards.push(wild_cards[wilds_used])
+          wilds_used++
+        } else {
+          break // Can't complete this straight flush
         }
       }
-      if (gaps <= wild_count) return true
+
+      if (sf_cards.length === 5) {
+        results.push(sf_cards)
+      }
     }
-    return false
+
+    return results
   }
 
+  // Check if a specific suit has a straight flush
+  const has_straight_flush_for_suit = (suit: number): boolean => {
+    return find_straight_flushes_for_suit(suit).length > 0
+  }
 
-  // Select all cards of a given suit
+  // Select the next straight flush for a suit (cycles through options)
   const handle_select_suit = (suit: number) => {
-    // Only allow when that specific suit has a straight flush
-    if (!has_straight_flush_for_suit(suit)) return
+    const straight_flushes = find_straight_flushes_for_suit(suit)
+    if (straight_flushes.length === 0) return
 
-    const suit_cards = cards.filter(c => c.Suit === suit)
-    if (suit_cards.length === 0) return
+    // Check if current selection matches any known SF
+    const current_selected_ids = new Set(selected_ids)
+    const matching_sf_idx = straight_flushes.findIndex(sf =>
+      sf.length === selected_ids.size && sf.every(c => current_selected_ids.has(c.Id))
+    )
 
-    // Toggle: if all are selected, deselect; otherwise select all
-    const all_selected = suit_cards.every(c => selected_ids.has(c.Id))
-    suit_cards.forEach(c => {
-      if (all_selected) {
-        on_card_click(c.Id) // deselect
-      } else if (!selected_ids.has(c.Id)) {
-        on_toggle_selection(c.Id) // select
+    // Determine next index
+    let next_idx: number
+    if (matching_sf_idx !== -1) {
+      // Currently have a SF selected, cycle to next (or deselect if at end)
+      next_idx = matching_sf_idx + 1
+      if (next_idx >= straight_flushes.length) {
+        // Deselect all
+        on_clear_selection()
+        sf_index_ref.current.set(suit, -1)
+        return
       }
-    })
+    } else {
+      // No SF selected, start from first
+      next_idx = 0
+    }
+
+    // Clear current selection and select the new SF
+    on_clear_selection()
+    const sf_to_select = straight_flushes[next_idx]
+    sf_to_select.forEach(c => on_toggle_selection(c.Id))
+    sf_index_ref.current.set(suit, next_idx)
   }
 
   // Swipe-to-select handlers
