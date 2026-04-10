@@ -414,7 +414,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
             fontWeight: 'bold',
             fontSize: 11,
           }}>
-            Your turn
+            My turn
           </div>
         )}
 
