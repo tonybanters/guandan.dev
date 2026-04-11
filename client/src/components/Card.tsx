@@ -23,10 +23,10 @@ export const CARD_CONFIG = {
             h_visible: 45, v_overlap: 20,
         },
         normal: {
-            width: 60, height: 84,
-            rank_font: 22, suit_font: 20,
-            center_font: 32, center_top: '65%', center_left: '65%',
-            h_visible: 25, v_overlap: 28,
+            width: 65, height: 67,
+            rank_font: 18, suit_font: 16,
+            center_font: 40, center_top: '65%', center_left: '65%',
+            h_visible: 45, v_overlap: 20,
         },
     },
     table: {
@@ -38,9 +38,9 @@ export const CARD_CONFIG = {
         },
         normal: {
             width: 55, height: 67,
-            rank_font: 15, suit_font: 13,
-            center_font: 24, center_top: '55%', center_left: '50%',
-            h_visible: 27, v_overlap: 0,
+            rank_font: 17, suit_font: 15,
+            center_font: 20, center_top: '60%', center_left: '70%',
+            h_visible: 20, v_overlap: 0,
         },
     },
 }
