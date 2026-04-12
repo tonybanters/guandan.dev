@@ -468,6 +468,13 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 		return
 	}
 
+	largestRank, ok := find_largest_tribute_rank(r.game.Hands[seat], r.game.Level)
+	if ok && card.Rank != largestRank {
+		log.Printf("[DEBUG] handle_tribute: card rank %d is not the largest (%d), rejecting", card.Rank, largestRank)
+		action.client.send_error("must tribute your largest card")
+		return
+	}
+
 	log.Printf("[DEBUG] handle_tribute: tributing card %v to seat %d", card, tribute_info.To_Seat)
 	card_value := game.Card_Value(*card, r.game.Level)
 	r.game.Remove_Cards(seat, []int{action.card_id})
@@ -508,6 +515,24 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 
 	// Trigger bot return if winner is a bot
 	r.trigger_bot_returns()
+}
+
+func find_largest_tribute_rank(hand []game.Card, level game.Rank) (game.Rank, bool) {
+	maxValue := -1
+	var maxRank game.Rank
+	found := false
+	for _, c := range hand {
+		if game.Is_Wild(c, level) {
+			continue
+		}
+		v := game.Card_Value(c, level)
+		if v > maxValue {
+			maxValue = v
+			maxRank = c.Rank
+			found = true
+		}
+	}
+	return maxRank, found
 }
 
 func (r *Room) handle_tribute_return(action Tribute_Action) {
