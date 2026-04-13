@@ -278,7 +278,7 @@ function get_card_value(card: Card, level: Rank): number {
   return get_rank_value(card.Rank, level)
 }
 
-function get_rank_value(rank: number, level: Rank): number {
+export function get_rank_value(rank: number, level: Rank): number {
   if (rank === 14) return 100 // red joker
   if (rank === 13) return 99  // black joker
   if (rank === level) return 98 // level card

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card as Card_Type, Rank, Rank_Ten, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades, is_wild } from '../game/types'
 import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
-import { detect_combo } from '../game/combos'
+import { detect_combo, get_rank_value } from '../game/combos'
 
 interface Hand_Props {
   cards: Card_Type[]
@@ -301,14 +301,27 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     }
   }
 
+  const required_tribute_rank = useMemo((): Rank | null => {
+    if (is_tribute_mode !== 'give') return null
+    const eligible = cards.filter(c => !is_wild(c, level))
+    if (eligible.length === 0) return null
+    const max_value = Math.max(...eligible.map(c => get_rank_value(c.Rank, level)))
+    const top = eligible.find(c => get_rank_value(c.Rank, level) === max_value)
+    return top ? top.Rank : null
+  }, [cards, level, is_tribute_mode])
+
   const is_valid_tribute_selection = useMemo(() => {
     if (selected_ids.size !== 1) return false
     const card = cards.find(c => c.Id === Array.from(selected_ids)[0])
     if (!card) return false
-    if (is_tribute_mode === 'give') return !is_wild(card, level)
+    if (is_tribute_mode === 'give') {
+      if (is_wild(card, level)) return false
+      if (required_tribute_rank === null) return false
+      return card.Rank === required_tribute_rank
+    }
     if (is_tribute_mode === 'return') return card.Rank <= Rank_Ten && !is_wild(card, level)
     return false
-  }, [selected_ids, cards, level, is_tribute_mode])
+  }, [selected_ids, cards, level, is_tribute_mode, required_tribute_rank])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
