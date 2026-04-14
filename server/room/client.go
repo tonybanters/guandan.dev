@@ -26,6 +26,7 @@ type Client struct {
 	mu            sync.Mutex
 	is_bot        bool
 	disconnected  bool
+	ready         bool
 }
 
 func new_client(id string, conn *websocket.Conn) *Client {
@@ -132,6 +133,12 @@ func (c *Client) handle_message(hub *Hub, msg *protocol.Message) {
 		c.handle_tribute_return_give(msg)
 	case protocol.Msg_Fill_Bots:
 		c.handle_fill_bots()
+	case protocol.Msg_Start_Game:
+		c.handle_start_game()
+	case protocol.Msg_Pick_Seat:
+		c.handle_pick_seat(msg)
+	case protocol.Msg_Ready:
+		c.handle_ready()
 	}
 }
 
@@ -140,6 +147,30 @@ func (c *Client) handle_fill_bots() {
 		return
 	}
 	c.room.fill_bots <- c
+}
+
+func (c *Client) handle_start_game() {
+	if c.room == nil {
+		return
+	}
+	c.room.start_game_req <- c
+}
+
+func (c *Client) handle_pick_seat(msg *protocol.Message) {
+	if c.room == nil {
+		return
+	}
+	payload_bytes, _ := json.Marshal(msg.Payload)
+	var payload protocol.Pick_Seat_Payload
+	json.Unmarshal(payload_bytes, &payload)
+	c.room.pick_seat <- Pick_Seat_Action{client: c, seat: payload.Seat}
+}
+
+func (c *Client) handle_ready() {
+	if c.room == nil {
+		return
+	}
+	c.room.ready <- c
 }
 
 func (c *Client) handle_create_room(hub *Hub, msg *protocol.Message) {

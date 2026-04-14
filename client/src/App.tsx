@@ -23,6 +23,7 @@ interface Room_State_Payload {
   players: Player_Info[]
   game_active: boolean
   your_id: string
+  is_host: boolean
 }
 
 interface Turn_Payload {
@@ -71,13 +72,20 @@ function get_ws_url(): string {
   return `${proto}//${window.location.host}/ws`
 }
 
+function get_room_id_from_url(): string | null {
+  const match = window.location.pathname.match(/^\/room\/([A-Za-z0-9]+)$/)
+  return match ? match[1] : null
+}
+
 export default function App() {
   const ws_url = get_ws_url()
   const { connected, reconnecting, send, on } = use_websocket(ws_url)
 
+  const [pending_room_id] = useState<string | null>(get_room_id_from_url)
   const [room_id, set_room_id] = useState<string | null>(null)
   const [players, set_players] = useState<Player_Info[]>([])
   const [game_active, set_game_active] = useState(false)
+  const [is_host, set_is_host] = useState(false)
 
   const [hand, set_hand] = useState<Card[]>([])
   const [level, set_level] = useState<Rank>(Rank_Two)
@@ -104,6 +112,8 @@ export default function App() {
       set_room_id(payload.room_id)
       set_players(payload.players)
       set_game_active(payload.game_active)
+      set_is_host(payload.is_host)
+      window.history.replaceState({}, '', `/room/${payload.room_id}`)
 
       const me = payload.players.find((p) => p.id === payload.your_id)
       if (me) {
@@ -216,6 +226,7 @@ export default function App() {
       const payload = msg.payload as Reconnect_Success_Payload
       // Restore full game state from reconnection
       set_room_id(payload.room_id)
+      window.history.replaceState({}, '', `/room/${payload.room_id}`)
       set_players(payload.players)
       set_game_active(payload.game_active)
       set_my_seat(payload.seat)
@@ -294,6 +305,18 @@ export default function App() {
 
   const handle_fill_bots = useCallback(() => {
     send({ type: 'fill_bots', payload: {} })
+  }, [send])
+
+  const handle_start_game = useCallback(() => {
+    send({ type: 'start_game', payload: {} })
+  }, [send])
+
+  const handle_pick_seat = useCallback((seat: number) => {
+    send({ type: 'pick_seat', payload: { seat } })
+  }, [send])
+
+  const handle_ready = useCallback(() => {
+    send({ type: 'ready', payload: {} })
   }, [send])
 
   const handle_card_click = useCallback((id: number) => {
@@ -381,6 +404,12 @@ export default function App() {
           on_create_room={handle_create_room}
           on_join_room={handle_join_room}
           on_fill_bots={handle_fill_bots}
+          on_start_game={handle_start_game}
+          on_pick_seat={handle_pick_seat}
+          on_ready={handle_ready}
+          pending_room_id={pending_room_id}
+          is_host={is_host}
+          my_seat={my_seat}
         />
         {error && <div style={styles.error}>{error}</div>}
       </>

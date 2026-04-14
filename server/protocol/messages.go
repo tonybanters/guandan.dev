@@ -31,6 +31,9 @@ const (
 	Msg_Reconnect_Success Msg_Type = "reconnect_success" // Server -> client: Reconnection successful with game state
 	Msg_Player_Disconnected Msg_Type = "player_disconnected" // Server -> clients: Player temporarily disconnected
 	Msg_Player_Reconnected  Msg_Type = "player_reconnected"  // Server -> clients: Player reconnected
+	Msg_Start_Game          Msg_Type = "start_game"           // Client -> server: Host starts the game
+	Msg_Pick_Seat           Msg_Type = "pick_seat"            // Client -> server: Player picks a seat
+	Msg_Ready               Msg_Type = "ready"                // Client -> server: Player toggles ready
 )
 
 type Message struct {
@@ -53,6 +56,7 @@ type Room_State_Payload struct {
 	Game_Active   bool          `json:"game_active"`
 	Your_Id       string        `json:"your_id"`
 	Session_Token string        `json:"session_token,omitempty"`
+	Is_Host       bool          `json:"is_host"`
 }
 
 type Player_Info struct {
@@ -151,4 +155,8 @@ type Player_Status_Payload struct {
 	Player_Id string `json:"player_id"`
 	Seat      int    `json:"seat"`
 	Name      string `json:"name"`
+}
+
+type Pick_Seat_Payload struct {
+	Seat int `json:"seat"`
 }

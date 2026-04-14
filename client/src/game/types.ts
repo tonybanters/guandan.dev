@@ -81,6 +81,9 @@ export type Msg_Type =
   | 'reconnect_success'
   | 'player_disconnected'
   | 'player_reconnected'
+  | 'start_game'
+  | 'pick_seat'
+  | 'ready'
 
 export interface Message<T = unknown> {
   type: Msg_Type

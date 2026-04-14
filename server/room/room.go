@@ -29,8 +29,14 @@ type Disconnected_Player struct {
 	name          string
 }
 
+type Pick_Seat_Action struct {
+	client *Client
+	seat   int
+}
+
 type Room struct {
 	id                   string
+	host                 *Client
 	clients              [4]*Client
 	game                 *game.Game_State
 	join                 chan *Client
@@ -40,6 +46,9 @@ type Room struct {
 	tribute              chan Tribute_Action
 	tribute_return       chan Tribute_Action
 	fill_bots            chan *Client
+	start_game_req       chan *Client
+	pick_seat            chan Pick_Seat_Action
+	ready                chan *Client
 	bot_turn             chan int
 	reconnect            chan Reconnect_Request
 	expire_disconnected  chan string // session_token
@@ -56,6 +65,9 @@ func new_room(id string) *Room {
 		tribute:              make(chan Tribute_Action),
 		tribute_return:       make(chan Tribute_Action),
 		fill_bots:            make(chan *Client),
+		start_game_req:       make(chan *Client),
+		pick_seat:            make(chan Pick_Seat_Action),
+		ready:                make(chan *Client),
 		bot_turn:             make(chan int),
 		reconnect:            make(chan Reconnect_Request),
 		expire_disconnected:  make(chan string),
@@ -64,6 +76,18 @@ func new_room(id string) *Room {
 }
 
 func (r *Room) run() {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("[ERROR] room %s panic: %v", r.id, err)
+			// Notify connected clients that the room crashed
+			for _, client := range r.clients {
+				if client != nil && !client.disconnected {
+					client.send_error("room encountered an error")
+				}
+			}
+		}
+	}()
+
 	for {
 		select {
 		case client := <-r.join:
@@ -82,6 +106,12 @@ func (r *Room) run() {
 			r.handle_tribute(action)
 		case action := <-r.tribute_return:
 			r.handle_tribute_return(action)
+		case client := <-r.start_game_req:
+			r.handle_start_game(client)
+		case action := <-r.pick_seat:
+			r.handle_pick_seat(action)
+		case client := <-r.ready:
+			r.handle_ready(client)
 		case <-r.fill_bots:
 			r.handle_fill_bots()
 		case seat := <-r.bot_turn:
@@ -91,6 +121,33 @@ func (r *Room) run() {
 }
 
 func (r *Room) handle_join(client *Client) {
+	// Check if this player name matches a disconnected player — rejoin them
+	for token, dp := range r.disconnected_players {
+		if dp.name == client.name {
+			log.Printf("[DEBUG] handle_join: player %s matches disconnected player at seat %d, rejoining", client.name, dp.seat)
+
+			old_client := r.clients[dp.seat]
+			if old_client != nil {
+				client.id = old_client.id
+				client.session_token = old_client.session_token
+			}
+			client.room = r
+			r.clients[dp.seat] = client
+			delete(r.disconnected_players, token)
+
+			r.send_reconnect_state(client, dp.seat)
+			r.broadcast(&protocol.Message{
+				Type: protocol.Msg_Player_Reconnected,
+				Payload: protocol.Player_Status_Payload{
+					Player_Id: client.id,
+					Seat:      dp.seat,
+					Name:      client.name,
+				},
+			})
+			return
+		}
+	}
+
 	seat := r.find_empty_seat()
 	if seat == -1 {
 		client.send_error("room is full")
@@ -100,11 +157,11 @@ func (r *Room) handle_join(client *Client) {
 	r.clients[seat] = client
 	client.room = r
 
-	r.broadcast_room_state()
-
-	if r.is_full() {
-		r.start_game()
+	if r.host == nil {
+		r.host = client
 	}
+
+	r.broadcast_room_state()
 }
 
 func (r *Room) handle_leave(client *Client) {
@@ -150,6 +207,12 @@ func (r *Room) handle_leave(client *Client) {
 			},
 		})
 
+		// If it was this player's turn, advance to the next player
+		if r.game.Current_Turn == seat {
+			log.Printf("[DEBUG] handle_leave: it was seat %d's turn, advancing", seat)
+			r.advance_turn()
+		}
+
 		// Set a timeout to fully remove the player if they don't reconnect
 		go func(token string, s int) {
 			time.Sleep(60 * time.Second) // 60 second reconnect window
@@ -162,6 +225,17 @@ func (r *Room) handle_leave(client *Client) {
 	// No game active - fully remove the player
 	r.clients[seat] = nil
 	client.room = nil
+
+	// Transfer host if the leaving player was host
+	if r.host == client {
+		r.host = nil
+		for _, c := range r.clients {
+			if c != nil && !c.disconnected && !c.is_bot {
+				r.host = c
+				break
+			}
+		}
+	}
 
 	r.broadcast(&protocol.Message{
 		Type: protocol.Msg_Player_Left,
@@ -243,6 +317,12 @@ func (r *Room) handle_expire_disconnected(token string) {
 			Seat: dp.seat,
 		},
 	})
+
+	// If it was the expired player's turn, advance to the next player
+	if r.game != nil && r.game.Current_Turn == dp.seat {
+		log.Printf("[DEBUG] handle_expire_disconnected: it was seat %d's turn, advancing", dp.seat)
+		r.advance_turn()
+	}
 }
 
 func (r *Room) send_reconnect_state(client *Client, seat int) {
@@ -403,22 +483,22 @@ func (r *Room) handle_pass(client *Client) {
 		lead_player := r.game.Lead_Player
 		var next_leader int
 
-		if !r.is_finished(lead_player) {
+		if !r.is_finished(lead_player) && r.clients[lead_player] != nil && !r.clients[lead_player].disconnected {
 			log.Printf("[DEBUG] handle_pass: lead player %d is unfinished, they lead again", lead_player)
 			next_leader = lead_player
 		} else {
-			// If lead player is finished, their teammate leads
+			// If lead player is finished or absent, their teammate leads
 			teammate := (lead_player + 2) % 4
-			if !r.is_finished(teammate) {
-				log.Printf("[DEBUG] handle_pass: lead player finished, teammate %d leads", teammate)
+			if !r.is_finished(teammate) && r.clients[teammate] != nil && !r.clients[teammate].disconnected {
+				log.Printf("[DEBUG] handle_pass: lead player finished/absent, teammate %d leads", teammate)
 				next_leader = teammate
 			} else {
-				// Otherwise, find next unfinished player in counterclockwise order
-				log.Printf("[DEBUG] handle_pass: lead player and teammate finished, finding next unfinished")
+				// Otherwise, find next unfinished and present player in counterclockwise order
+				log.Printf("[DEBUG] handle_pass: lead player and teammate finished/absent, finding next available")
 				for i := 1; i <= 4; i++ {
 					candidate := (lead_player - i + 4) % 4
-					if !r.is_finished(candidate) {
-						log.Printf("[DEBUG] handle_pass: found unfinished player %d", candidate)
+					if !r.is_finished(candidate) && r.clients[candidate] != nil && !r.clients[candidate].disconnected {
+						log.Printf("[DEBUG] handle_pass: found available player %d", candidate)
 						next_leader = candidate
 						break
 					}
@@ -934,8 +1014,9 @@ func (r *Room) advance_turn() {
 	for i := 1; i <= 4; i++ {
 		next := (r.game.Current_Turn - i + 4) % 4
 		finished := r.is_finished(next)
-		log.Printf("[DEBUG] advance_turn: checking seat %d, finished=%v", next, finished)
-		if !finished {
+		absent := r.clients[next] == nil || r.clients[next].disconnected
+		log.Printf("[DEBUG] advance_turn: checking seat %d, finished=%v, absent=%v", next, finished, absent)
+		if !finished && !absent {
 			log.Printf("[DEBUG] advance_turn: setting turn to seat %d", next)
 			r.game.Current_Turn = next
 			r.send_turn_notification()
@@ -943,7 +1024,7 @@ func (r *Room) advance_turn() {
 			return
 		}
 	}
-	log.Printf("[DEBUG] advance_turn: no unfinished player found!")
+	log.Printf("[DEBUG] advance_turn: no available player found!")
 }
 
 func (r *Room) is_finished(seat int) bool {
@@ -958,10 +1039,15 @@ func (r *Room) is_finished(seat int) bool {
 func (r *Room) send_turn_notification() {
 	can_pass := r.game.Current_Lead.Type != game.Comb_Invalid
 
+	player_id := ""
+	if c := r.clients[r.game.Current_Turn]; c != nil {
+		player_id = c.id
+	}
+
 	r.broadcast(&protocol.Message{
 		Type: protocol.Msg_Turn,
 		Payload: protocol.Turn_Payload{
-			Player_Id: r.clients[r.game.Current_Turn].id,
+			Player_Id: player_id,
 			Seat:      r.game.Current_Turn,
 			Can_Pass:  can_pass,
 		},
@@ -981,10 +1067,11 @@ func (r *Room) broadcast_room_state() {
 	for i, c := range r.clients {
 		if c != nil && !c.disconnected {
 			players = append(players, protocol.Player_Info{
-				Id:   c.id,
-				Name: c.name,
-				Seat: i,
-				Team: i % 2,
+				Id:       c.id,
+				Name:     c.name,
+				Seat:     i,
+				Team:     i % 2,
+				Is_Ready: c.ready,
 			})
 		}
 	}
@@ -999,6 +1086,7 @@ func (r *Room) broadcast_room_state() {
 					Game_Active:   r.game != nil,
 					Your_Id:       client.id,
 					Session_Token: client.session_token,
+					Is_Host:       r.host == client,
 				},
 			})
 		}
@@ -1056,22 +1144,79 @@ func seats_to_ids(seats []int, clients [4]*Client) []string {
 	return ids
 }
 
+func (r *Room) handle_pick_seat(action Pick_Seat_Action) {
+	if r.game != nil {
+		action.client.send_error("game already started")
+		return
+	}
+
+	if action.seat < 0 || action.seat > 3 {
+		action.client.send_error("invalid seat")
+		return
+	}
+
+	if r.clients[action.seat] != nil && r.clients[action.seat] != action.client {
+		action.client.send_error("seat is taken")
+		return
+	}
+
+	// Find current seat and move
+	for i := range 4 {
+		if r.clients[i] == action.client {
+			r.clients[i] = nil
+			break
+		}
+	}
+	r.clients[action.seat] = action.client
+	action.client.ready = false // Reset ready when changing seats
+
+	r.broadcast_room_state()
+}
+
+func (r *Room) handle_ready(client *Client) {
+	if r.game != nil {
+		return
+	}
+
+	client.ready = !client.ready
+	r.broadcast_room_state()
+}
+
+func (r *Room) handle_start_game(client *Client) {
+	if r.game != nil {
+		return
+	}
+	if client != r.host {
+		client.send_error("only the host can start the game")
+		return
+	}
+	if !r.is_full() {
+		client.send_error("need 4 players to start")
+		return
+	}
+	// Check all human players are ready
+	for _, c := range r.clients {
+		if c != nil && !c.is_bot && !c.ready && c != r.host {
+			client.send_error("not all players are ready")
+			return
+		}
+	}
+	r.start_game()
+}
+
 func (r *Room) handle_fill_bots() {
 	bot_idx := 0
 	for i := 0; i < 4; i++ {
 		if r.clients[i] == nil && bot_idx < len(bot_names) {
 			bot := new_bot(generate_id(), bot_names[bot_idx])
 			bot.room = r
+			bot.ready = true
 			r.clients[i] = bot
 			bot_idx++
 		}
 	}
 
 	r.broadcast_room_state()
-
-	if r.is_full() {
-		r.start_game()
-	}
 }
 
 func (r *Room) handle_bot_turn(seat int) {
