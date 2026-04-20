@@ -10,3 +10,7 @@ func rand_int(max int) int {
 	rand.Read(b[:])
 	return int(binary.LittleEndian.Uint64(b[:]) % uint64(max))
 }
+
+func Random_Seat() int {
+	return rand_int(4)
+}

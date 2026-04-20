@@ -765,7 +765,7 @@ func (r *Room) start_game() {
 	}
 
 	r.game.Phase = game.Phase_Play
-	r.game.Current_Turn = 0
+	r.game.Current_Turn = game.Random_Seat()
 	r.send_turn_notification()
 	r.trigger_bot_turn_if_needed()
 }
