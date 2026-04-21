@@ -235,7 +235,9 @@ func detect_straight(non_wild, wild []Card, level Rank) Combination {
 		Rank_Jack, Rank_Queen, Rank_King, Rank_Ace,
 	}
 
-	for start := 0; start <= len(natural_order)-5; start++ {
+	// Scan high→low so wilds fill the highest valid straight (e.g., 10,J,Q,K
+	// + wild resolves to 10-J-Q-K-A, not 9-10-J-Q-K).
+	for start := len(natural_order) - 5; start >= 0; start-- {
 		needed := 0
 		valid := true
 		highest := natural_order[start+4]
@@ -297,7 +299,8 @@ func detect_tube(non_wild, wild []Card, level Rank) Combination {
 		Rank_Jack, Rank_Queen, Rank_King, Rank_Ace,
 	}
 
-	for start := 0; start <= len(natural_order)-3; start++ {
+	// Scan high→low so wilds fill the highest valid tube.
+	for start := len(natural_order) - 3; start >= 0; start-- {
 		needed := 0
 		valid := true
 		highest := natural_order[start+2]
@@ -402,7 +405,14 @@ func Can_Beat(play, lead Combination) bool {
 	}
 
 	if play.Type == Comb_Bomb && lead.Type == Comb_Bomb {
-		return play.Bomb_Power > lead.Bomb_Power
+		if play.Bomb_Power != lead.Bomb_Power {
+			return play.Bomb_Power > lead.Bomb_Power
+		}
+		// Same bomb power (e.g., two straight flushes, both power 599): break
+		// the tie by the highest card. Bomb_Power alone can't distinguish SFs
+		// because the [599, 599] gap between 5-bomb and 6-bomb has no integer
+		// room for internal ordering.
+		return play.Rank_Value > lead.Rank_Value
 	}
 
 	if play.Type != lead.Type {

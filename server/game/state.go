@@ -146,6 +146,33 @@ func (g *Game_State) is_double_win() bool {
 	return g.Finish_Order[0]%2 == g.Finish_Order[1]%2
 }
 
+// Check_Kang_Gong implements the "refuse tribute" rule (抗贡): if the tribute
+// payers collectively hold both red jokers in their freshly dealt hands, they
+// may refuse to pay. Caller must invoke this after the new hands are dealt.
+// Returns true when tribute is refused. Relies on the invariant that all
+// From_Seats in Tributes belong to the same (losing) team, which Setup_Tributes
+// guarantees.
+func (g *Game_State) Check_Kang_Gong() bool {
+	if len(g.Tributes) == 0 {
+		return false
+	}
+
+	red_jokers := 0
+	for _, t := range g.Tributes {
+		for _, card := range g.Hands[t.From_Seat] {
+			if card.Rank == Rank_Red_Joker {
+				red_jokers++
+			}
+		}
+	}
+
+	if red_jokers >= 2 {
+		g.Tributes = nil
+		return true
+	}
+	return false
+}
+
 func (g *Game_State) Get_Tribute_Info(seat int) *Tribute_Info {
 	for i := range g.Tributes {
 		if g.Tributes[i].From_Seat == seat && !g.Tributes[i].Done {

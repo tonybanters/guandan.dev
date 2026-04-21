@@ -22,6 +22,7 @@ const (
 	Msg_Tribute_Return_Give Msg_Type = "tribute_return_give" // Client -> server: Here's the card I'm returning
 	Msg_Tribute_Give_Ok     Msg_Type = "tribute_give_ok"     // Server -> client: Tribute accepted
 	Msg_Tribute_Return_Ok   Msg_Type = "tribute_return_ok"   // Server -> client: Return accepted
+	Msg_Kang_Gong           Msg_Type = "kang_gong"           // Server -> clients: Tribute refused (payers held both red jokers)
 	Msg_Game_End      Msg_Type = "game_end"
 	Msg_Error         Msg_Type = "error"
 	Msg_Player_Joined Msg_Type = "player_joined"
@@ -117,6 +118,11 @@ type Tribute_Return_Payload struct {
 
 type Tribute_Ok_Payload struct {
 	Card_Id int `json:"card_id"`
+}
+
+type Kang_Gong_Payload struct {
+	From_Seats []int `json:"from_seats"` // The seats that would have paid tribute
+	Leader     int   `json:"leader"`     // Seat that leads the new hand (first finisher)
 }
 
 type Game_End_Payload struct {

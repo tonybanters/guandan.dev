@@ -1,19 +1,28 @@
 package game
 
+// Bomb power scheme:
+//   n-of-a-kind bomb:  n*100 + rank_value (rank_value 0-98)
+//     4-bomb: 400-498,  5-bomb: 500-598
+//     6-bomb: 600-698,  7-bomb: 700-798,  8-bomb: 800-898
+//   straight flush:    599 — sits strictly above any 5-bomb and below any 6-bomb.
+//     Flat Bomb_Power because the [599, 599] gap has no integer room.
+//     SF-vs-SF ordering falls back to Rank_Value (see Can_Beat).
+//   four-joker bomb:   2000 — unbeatable top of the stack.
 func detect_bomb(cards []Card, level Rank) Combination {
 	n := len(cards)
 	if n == 4 && is_four_joker_bomb(cards) {
 		return Combination{
 			Type:       Comb_Bomb,
 			Cards:      cards,
-			Bomb_Power: 1000,
+			Bomb_Power: 2000,
 		}
 	}
 	if is_straight_flush(cards, level) {
 		return Combination{
 			Type:       Comb_Bomb,
 			Cards:      cards,
-			Bomb_Power: 900 + straight_flush_value(cards, level),
+			Bomb_Power: 599,
+			Rank_Value: straight_flush_value(cards, level),
 		}
 	}
 	if n >= 4 && n <= 10 {
@@ -52,25 +61,34 @@ func is_four_joker_bomb(cards []Card) bool {
 }
 
 func is_straight_flush(cards []Card, level Rank) bool {
+	_, ok := straight_flush_top(cards, level)
+	return ok
+}
+
+// straight_flush_top returns the highest rank of the highest valid straight
+// flush interpretation of the given cards. Wild cards fill gaps and are always
+// assigned to the highest-ranked valid position (so 8,9,10,J♠ + wild♥ is
+// interpreted as Q-high, not J-high).
+func straight_flush_top(cards []Card, level Rank) (Rank, bool) {
 	if len(cards) < 5 {
-		return false
+		return 0, false
 	}
 
 	non_wild, wild := separate_wilds(cards, level)
 
 	if len(non_wild) == 0 {
-		return false
+		return 0, false
 	}
 
 	var suit Suit = -1
 	for _, c := range non_wild {
 		if c.Rank == Rank_Black_Joker || c.Rank == Rank_Red_Joker {
-			return false
+			return 0, false
 		}
 		if suit == -1 {
 			suit = c.Suit
 		} else if c.Suit != suit {
-			return false
+			return 0, false
 		}
 	}
 
@@ -88,7 +106,8 @@ func is_straight_flush(cards []Card, level Rank) bool {
 	needed_len := len(cards)
 	wilds_available := len(wild)
 
-	for start := 0; start <= len(natural_order)-needed_len; start++ {
+	// Scan high→low so the first valid window found has the highest top.
+	for start := len(natural_order) - needed_len; start >= 0; start-- {
 		gaps := 0
 		for i := 0; i < needed_len; i++ {
 			rank := natural_order[start+i]
@@ -97,25 +116,19 @@ func is_straight_flush(cards []Card, level Rank) bool {
 			}
 		}
 		if gaps <= wilds_available {
-			return true
+			return natural_order[start+needed_len-1], true
 		}
 	}
 
-	return false
+	return 0, false
 }
 
 func straight_flush_value(cards []Card, level Rank) int {
-	non_wild, _ := separate_wilds(cards, level)
-
-	max_val := 0
-	for _, c := range non_wild {
-		v := rank_value(c.Rank, level)
-		if v > max_val {
-			max_val = v
-		}
+	top, ok := straight_flush_top(cards, level)
+	if !ok {
+		return 0
 	}
-
-	return len(cards)*10 + max_val
+	return len(cards)*10 + rank_value(top, level)
 }
 
 func is_n_of_kind_bomb(cards []Card, level Rank) (int, bool) {

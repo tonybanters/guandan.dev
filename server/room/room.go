@@ -471,9 +471,14 @@ func (r *Room) handle_pass(client *Client) {
 		},
 	})
 
-	// Calculate how many passes needed: all active players except the lead player
-	active_players := 4 - len(r.game.Finish_Order)
-	passes_needed := active_players - 1
+	// Calculate how many passes needed: all active (unfinished) players,
+	// minus the lead player only if they're still active. If the lead just
+	// finished by playing their last card, every remaining player still needs
+	// a chance to respond before the trick resets.
+	passes_needed := 4 - len(r.game.Finish_Order)
+	if !r.is_finished(r.game.Lead_Player) {
+		passes_needed--
+	}
 
 	if r.game.Pass_Count >= passes_needed {
 		log.Printf("[DEBUG] handle_pass: %d passes (needed %d), resetting lead. Lead_Player=%d", r.game.Pass_Count, passes_needed, r.game.Lead_Player)
@@ -889,6 +894,27 @@ func (r *Room) setup_tribute() {
 
 	// Deal new cards FIRST - players need cards to tribute from
 	r.deal_new_cards()
+
+	// Kang gong: if the paying side holds both red jokers, skip tribute.
+	// Capture the original payers before the check clears Tributes so we can
+	// tell clients who would have paid.
+	// TODO(future): refactor the tribute phase UI to be more public —
+	// currently only the paying/receiving seats see what's happening. The
+	// whole table should see tribute cards, returns, and kang gong events.
+	pre_kang_gong_payers := make([]int, 0, len(r.game.Tributes))
+	for _, t := range r.game.Tributes {
+		pre_kang_gong_payers = append(pre_kang_gong_payers, t.From_Seat)
+	}
+	if r.game.Check_Kang_Gong() {
+		log.Printf("[DEBUG] setup_tribute: kang gong triggered, skipping tribute")
+		r.broadcast(&protocol.Message{
+			Type: protocol.Msg_Kang_Gong,
+			Payload: protocol.Kang_Gong_Payload{
+				From_Seats: pre_kang_gong_payers,
+				Leader:     r.game.Tribute_Leader,
+			},
+		})
+	}
 
 	if len(r.game.Tributes) == 0 {
 		// No tributes (e.g., tribute payer had both red jokers) - first finisher goes first
