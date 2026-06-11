@@ -1,0 +1,57 @@
+* ios client
+
+native swiftui client for guandan.dev. the go server stays authoritative;
+this is a second client speaking the same websocket protocol as client/.
+
+** layout
+
+- =GuandanCore/= :: plain swift package, no ui. types, combo detection, and
+  message payloads ported from =client/src/game/=. builds and tests on linux
+  or mac.
+- =Guandan/= :: the ios app target. swiftui views, websocket client,
+  observable game store. needs xcode.
+
+** working on linux (logic only)
+
+#+begin_src sh
+just ios-build   # compile GuandanCore (nix swift toolchain)
+just ios-test    # run tests (podman, official swift image)
+#+end_src
+
+the nixpkgs swift toolchain compiles the package but ships without
+libIndexStore.so, which swiftpm test discovery needs, so tests run in the
+official swift container via podman instead.
+
+** working on the mac
+
+one-time setup:
+
+1. install xcode from the app store, then =xcode-select --install=
+2. =brew install xcodegen=
+3. =cd ios/Guandan && xcodegen generate=
+4. =open Guandan.xcodeproj=
+
+daily loop:
+
+- view work: edit in xcode, use =#Preview= canvas for live reload
+- logic work: any editor, sourcekit-lsp ships with the toolchain
+- run: cmd-r to simulator; pick your plugged-in phone as destination for
+  device installs (free apple id signs for 7 days)
+- core tests: =cd ios/GuandanCore && swift test=
+
+the project file is generated from =project.yml=; rerun =xcodegen generate=
+after adding files, and keep =Guandan.xcodeproj= out of git.
+
+** protocol parity todo
+
+the store handles room_state, deal_cards, turn, play_made, reconnect_success,
+and error. still to port from =client/src/App.tsx=:
+
+- hand_end / game_end flow and finish order
+- tribute flow (tribute, tribute_give, tribute_recv, tribute_return,
+  tribute_return_give, tribute_paid, tribute_returned, kang_gong)
+- queue_status / requeued for quick match
+- player_disconnected / player_reconnected banners
+- lobby ui (seat picking, ready, invite links)
+- custom piles and the straight flush helpers from Hand.tsx
+- apns push for turn notifications (needs paid developer account)
