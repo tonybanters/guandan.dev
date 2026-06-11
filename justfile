@@ -21,6 +21,15 @@ build:
 install:
     cd client && npm install
 
+ios-build:
+    cd ios/GuandanCore && nix-shell -p swift swiftpm --run "swift build"
+
+ios-test:
+    cd ios/GuandanCore && podman run --rm -v "$PWD":/src:Z -w /src docker.io/library/swift:5.10 swift test
+
+ios-gen:
+    cd ios/Guandan && xcodegen generate
+
 deploy:
     #!/usr/bin/env bash
     cd /www/sites/guandanbtw
