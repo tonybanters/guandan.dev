@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Ten, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
@@ -85,6 +85,7 @@ export function Game({
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
   const is_mobile = use_is_mobile()
+  const [show_leave_confirm, set_show_leave_confirm] = useState(false)
 
   // Save the original on_card_click for suit buttons to use
   const original_on_card_click = on_card_click
@@ -144,7 +145,7 @@ export function Game({
             <span style={{ marginLeft: is_mobile ? 8 : 12, color: '#f48fb1' }}>T2: {get_rank_symbol(team_levels[1] as Rank)}</span>
           </div>
           <button
-            onClick={() => { if (window.confirm('Leave the game? Your seat is held for 60 seconds.')) on_leave() }}
+            onClick={() => set_show_leave_confirm(true)}
             style={{
               padding: is_mobile ? '2px 8px' : '3px 10px',
               fontSize: is_mobile ? 10 : 12,
@@ -347,7 +348,112 @@ export function Game({
           </motion.div>
         )}
       </div>
+
+      <Leave_Confirm_Modal
+        open={show_leave_confirm}
+        on_confirm={on_leave}
+        on_cancel={() => set_show_leave_confirm(false)}
+        is_mobile={is_mobile}
+      />
     </div>
+  )
+}
+
+interface Leave_Confirm_Modal_Props {
+  open: boolean
+  on_confirm: () => void
+  on_cancel: () => void
+  is_mobile: boolean
+}
+
+function Leave_Confirm_Modal({ open, on_confirm, on_cancel, is_mobile }: Leave_Confirm_Modal_Props) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={on_cancel}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 300,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ duration: 0.15 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#16213e',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 12,
+              padding: is_mobile ? '16px 20px' : '24px 28px',
+              maxWidth: '85vw',
+              textAlign: 'center',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{
+              color: '#fff',
+              fontWeight: 'bold',
+              fontSize: is_mobile ? 16 : 18,
+              marginBottom: 6,
+            }}>
+              Leave the game?
+            </div>
+            <div style={{
+              color: '#aaa',
+              fontSize: is_mobile ? 12 : 13,
+              marginBottom: is_mobile ? 14 : 18,
+            }}>
+              Your seat is held for 60 seconds
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={on_cancel}
+                style={{
+                  padding: is_mobile ? '8px 18px' : '9px 22px',
+                  fontSize: is_mobile ? 13 : 14,
+                  backgroundColor: '#6c757d',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={on_confirm}
+                style={{
+                  padding: is_mobile ? '8px 18px' : '9px 22px',
+                  fontSize: is_mobile ? 13 : 14,
+                  fontWeight: 'bold',
+                  backgroundColor: '#dc3545',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                Leave
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
