@@ -9,6 +9,7 @@ import {
     Rank,
     Rank_Two,
     Message,
+    Tribute_Event,
 } from './game/types'
 import {
     find_same_rank,
@@ -105,7 +106,8 @@ export default function App() {
     const [leading_seat, set_leading_seat] = useState<number | null>(null)
     const [tribute_target, set_tribute_target] = useState<number | null>(null)
     const [return_target, set_return_target] = useState<number | null>(null)
-    const [received_tribute_card, set_received_tribute_card] = useState<Card | null>(null)
+    const [tribute_events, set_tribute_events] = useState<Tribute_Event[]>([])
+    const tribute_event_id = useRef(0)
 
     const [in_queue, set_in_queue] = useState(false)
     const [queue_found, set_queue_found] = useState(1)
@@ -241,8 +243,26 @@ export default function App() {
         const unsub_tribute_recv = on('tribute_recv', (msg: Message) => {
             const payload = msg.payload as { card: Card }
             set_hand((prev) => sort_cards([...prev, payload.card], level))
-            set_received_tribute_card(payload.card)
-            setTimeout(() => set_received_tribute_card(null), 2500)
+        })
+
+        const push_tribute_event = (kind: Tribute_Event['kind'], from_seat: number, to_seat: number, card: Card | null) => {
+            const id = ++tribute_event_id.current
+            set_tribute_events((prev) => [...prev, { id, kind, from_seat, to_seat, card }])
+            setTimeout(() => set_tribute_events((prev) => prev.filter((e) => e.id !== id)), 7000)
+        }
+
+        const unsub_tribute_paid = on('tribute_paid', (msg: Message) => {
+            const payload = msg.payload as { from_seat: number; to_seat: number; card: Card }
+            push_tribute_event('pay', payload.from_seat, payload.to_seat, payload.card)
+        })
+
+        const unsub_tribute_returned = on('tribute_returned', (msg: Message) => {
+            const payload = msg.payload as { from_seat: number; to_seat: number; card: Card }
+            push_tribute_event('return', payload.from_seat, payload.to_seat, payload.card)
+        })
+
+        const unsub_kang_gong = on('kang_gong', () => {
+            push_tribute_event('kang_gong', -1, -1, null)
         })
 
         const unsub_tribute_give_ok = on('tribute_give_ok', (msg: Message) => {
@@ -309,6 +329,9 @@ export default function App() {
             unsub_tribute()
             unsub_tribute_return()
             unsub_tribute_recv()
+            unsub_tribute_paid()
+            unsub_tribute_returned()
+            unsub_kang_gong()
             unsub_tribute_give_ok()
             unsub_tribute_return_ok()
             unsub_reconnect_success()
@@ -525,7 +548,7 @@ export default function App() {
                 is_tribute_mode={tribute_target !== null ? 'give' : return_target !== null ? 'return' : false}
                 tribute_target_name={tribute_target !== null ? (players_map[tribute_target] || `Player ${tribute_target + 1}`) : (return_target !== null ? (players_map[return_target] || `Player ${return_target + 1}`) : undefined)}
                 on_tribute={handle_tribute_play}
-                received_tribute_card={received_tribute_card}
+                tribute_events={tribute_events}
                 on_leave={handle_leave}
             />
             {error && <div style={styles.error}>{error}</div>}

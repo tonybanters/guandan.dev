@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Ten, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
+import { Card as Card_Type, Rank, Tribute_Event, get_rank_symbol, Rank_Two, Rank_Ten, Rank_King, Rank_Ace, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile, use_is_short } from '../hooks/use_is_mobile'
@@ -11,21 +11,19 @@ interface Player_Play {
   is_pass: boolean
 }
 
-// Sort cards by natural rank order (A, 2, 3, 4, ... K, A) for display
+// Sort cards by natural rank order for display, with jokers last. When a
+// play uses the ace as the low end of a run (A-2-3-4-5, AA2233, ...) the
+// ace sorts before the 2; an ace alongside a king stays high (10-J-Q-K-A).
 function sort_played_cards(cards: Card_Type[]): Card_Type[] {
+  const has_rank = (r: Rank) => cards.some(c => c.Rank === r)
+  const ace_low = has_rank(Rank_Ace) && has_rank(Rank_Two) && !has_rank(Rank_King)
+
   const natural_order = (rank: Rank): number => {
-    // Jokers go last
     if (rank === Rank_Black_Joker) return 100
     if (rank === Rank_Red_Joker) return 101
-    // Ace can be low (before 2) - use 1
-    // For tubes/straights starting with A, we want A-2-3 order
-    // Natural order: A=1, 2=2, 3=3, ..., K=13, A(high)=14
-    // But for sorting display, we'll use: 2=0, 3=1, ..., A=12 with special handling
-    // Actually simpler: just sort by rank value where 2=0, 3=1, ..., K=11, A=12
+    if (rank === Rank_Ace) return ace_low ? -1 : 12
     if (rank === Rank_Two) return 0
-    if (rank >= 1 && rank <= 11) return rank // 3-K maps to 1-11
-    if (rank === 12) return 12 // Ace
-    return rank
+    return rank // 3-K maps to 1-11
   }
 
   return [...cards].sort((a, b) => natural_order(a.Rank) - natural_order(b.Rank))
@@ -55,7 +53,7 @@ interface Game_Props {
   is_tribute_mode?: 'give' | 'return' | false
   tribute_target_name?: string
   on_tribute?: () => void
-  received_tribute_card?: Card_Type | null
+  tribute_events: Tribute_Event[]
   on_leave: () => void
 }
 
@@ -79,7 +77,7 @@ export function Game({
   is_tribute_mode,
   tribute_target_name,
   on_tribute,
-  received_tribute_card,
+  tribute_events,
   on_leave,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
@@ -299,31 +297,32 @@ export function Game({
         </div>
       )}
 
-      {/* Tribute receipt notification */}
-      {received_tribute_card && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ duration: 0.3 }}
-          style={{
-            position: 'fixed',
-            top: '40px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(76, 175, 80, 0.9)',
-            color: '#fff',
-            padding: is_mobile ? '8px 16px' : '12px 24px',
-            borderRadius: 8,
-            fontWeight: 'bold',
-            fontSize: is_mobile ? 14 : 16,
-            zIndex: 200,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            textAlign: 'center',
-          }}>
-          You received: {get_rank_symbol(received_tribute_card.Rank)}
-        </motion.div>
-      )}
+      {/* Public tribute feed - everyone sees who paid what to whom */}
+      <div style={{
+        position: 'fixed',
+        top: '26%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
+        zIndex: 200,
+        pointerEvents: 'none',
+      }}>
+        <AnimatePresence>
+          {tribute_events.map((ev) => (
+            <Tribute_Banner
+              key={ev.id}
+              event={ev}
+              level={level}
+              my_seat={my_seat}
+              players_map={players_map}
+              is_mobile={is_mobile}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* My area at bottom */}
       <div style={is_mobile ? mobile_styles.my_area : styles.my_area}>
@@ -454,6 +453,59 @@ function Leave_Confirm_Modal({ open, on_confirm, on_cancel, is_mobile }: Leave_C
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+interface Tribute_Banner_Props {
+  event: Tribute_Event
+  level: Rank
+  my_seat: number
+  players_map: Record<number, string>
+  is_mobile: boolean
+}
+
+function Tribute_Banner({ event, level, my_seat, players_map, is_mobile }: Tribute_Banner_Props) {
+  const seat_name = (seat: number) =>
+    seat === my_seat ? 'You' : players_map[seat] || `P${seat + 1}`
+
+  const text = event.kind === 'kang_gong'
+    ? 'Tribute refused — both red jokers (kang gong)'
+    : event.kind === 'pay'
+      ? `${seat_name(event.from_seat)} paid tribute to ${seat_name(event.to_seat)}`
+      : `${seat_name(event.from_seat)} returned to ${seat_name(event.to_seat)}`
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.9 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: event.kind === 'kang_gong' ? 'rgba(220, 53, 69, 0.85)' : 'rgba(0, 0, 0, 0.78)',
+        border: '1px solid rgba(255, 193, 7, 0.5)',
+        color: '#fff',
+        padding: is_mobile ? '4px 10px' : '6px 14px',
+        borderRadius: 8,
+        fontSize: is_mobile ? 12 : 14,
+        fontWeight: 'bold',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+      }}
+    >
+      <span>{text}</span>
+      {event.card && (
+        <Card
+          card={event.card}
+          level={level}
+          selected={false}
+          on_click={() => {}}
+          size={is_mobile ? 'tiny' : 'small'}
+          context="table"
+        />
+      )}
+    </motion.div>
   )
 }
 

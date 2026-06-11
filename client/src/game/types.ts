@@ -89,6 +89,18 @@ export type Msg_Type =
   | 'queue_leave'
   | 'queue_status'
   | 'requeued'
+  | 'tribute_paid'
+  | 'tribute_returned'
+  | 'kang_gong'
+
+// a public tribute happening, shown to the whole table
+export interface Tribute_Event {
+  id: number
+  kind: 'pay' | 'return' | 'kang_gong'
+  from_seat: number
+  to_seat: number
+  card: Card | null
+}
 
 export interface Message<T = unknown> {
   type: Msg_Type

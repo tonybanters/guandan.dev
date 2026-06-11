@@ -599,6 +599,15 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 		Payload: protocol.Tribute_Ok_Payload{Card_Id: action.card_id},
 	})
 
+	r.broadcast(&protocol.Message{
+		Type: protocol.Msg_Tribute_Paid,
+		Payload: protocol.Tribute_Public_Payload{
+			From_Seat: seat,
+			To_Seat:   tribute_info.To_Seat,
+			Card:      *card,
+		},
+	})
+
 	r.game.Mark_Tribute_Done_With_Value(seat, card_value)
 	log.Printf("[DEBUG] handle_tribute: marked done with value %d, All_Tributes_Done=%v", card_value, r.game.All_Tributes_Done())
 
@@ -683,6 +692,15 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 	action.client.send_message(&protocol.Message{
 		Type:    protocol.Msg_Tribute_Return_Ok,
 		Payload: protocol.Tribute_Ok_Payload{Card_Id: action.card_id},
+	})
+
+	r.broadcast(&protocol.Message{
+		Type: protocol.Msg_Tribute_Returned,
+		Payload: protocol.Tribute_Public_Payload{
+			From_Seat: seat,
+			To_Seat:   loser_seat,
+			Card:      *card,
+		},
 	})
 
 	r.game.Mark_Return_Done(seat)

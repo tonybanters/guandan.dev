@@ -22,7 +22,9 @@ const (
 	Msg_Tribute_Return_Give Msg_Type = "tribute_return_give"
 	Msg_Tribute_Give_Ok     Msg_Type = "tribute_give_ok"
 	Msg_Tribute_Return_Ok   Msg_Type = "tribute_return_ok"
-	Msg_Kang_Gong           Msg_Type = "kang_gong" // no tax if 2 red jokers
+	Msg_Kang_Gong           Msg_Type = "kang_gong"        // no tax if 2 red jokers
+	Msg_Tribute_Paid        Msg_Type = "tribute_paid"     // server -> clients: a tribute card changed hands
+	Msg_Tribute_Returned    Msg_Type = "tribute_returned" // server -> clients: a return card changed hands
 	Msg_Game_End            Msg_Type = "game_end"
 	Msg_Error               Msg_Type = "error"
 	Msg_Player_Joined       Msg_Type = "player_joined"
@@ -133,6 +135,12 @@ type Tribute_Return_Payload struct {
 
 type Tribute_Ok_Payload struct {
 	Card_Id int `json:"card_id"`
+}
+
+type Tribute_Public_Payload struct {
+	From_Seat int       `json:"from_seat"`
+	To_Seat   int       `json:"to_seat"`
+	Card      game.Card `json:"card"`
 }
 
 type Kang_Gong_Payload struct {
