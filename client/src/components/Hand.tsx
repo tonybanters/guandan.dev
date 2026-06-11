@@ -1,9 +1,9 @@
 import { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card as Card_Type, Rank, Rank_Ten, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades, is_wild } from '../game/types'
+import { Card as Card_Type, Rank, Suit_Hearts, Suit_Diamonds, Suit_Clubs, Suit_Spades } from '../game/types'
 import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
-import { detect_combo, get_rank_value } from '../game/combos'
+import { detect_combo } from '../game/combos'
 
 interface Hand_Props {
   cards: Card_Type[]
@@ -13,10 +13,6 @@ interface Hand_Props {
   on_toggle_selection: (id: number) => void
   on_select_same_rank: (rank: number) => void
   on_clear_selection: () => void
-  on_play: () => void
-  on_pass: () => void
-  is_my_turn: boolean
-  can_pass: boolean
   is_tribute_mode?: 'give' | 'return' | false
 }
 
@@ -26,7 +22,7 @@ interface Column {
   is_custom: boolean
 }
 
-export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, on_play, on_pass, is_my_turn, can_pass, is_tribute_mode }: Hand_Props) {
+export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, is_tribute_mode }: Hand_Props) {
   const is_mobile = use_is_mobile()
   const last_click = useRef<{ id: number; time: number } | null>(null)
   const [custom_columns, set_custom_columns] = useState<Map<string, number[]>>(new Map())
@@ -301,32 +297,18 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
     }
   }
 
-  const required_tribute_rank = useMemo((): Rank | null => {
-    if (is_tribute_mode !== 'give') return null
-    const eligible = cards.filter(c => !is_wild(c, level))
-    if (eligible.length === 0) return null
-    const max_value = Math.max(...eligible.map(c => get_rank_value(c.Rank, level)))
-    const top = eligible.find(c => get_rank_value(c.Rank, level) === max_value)
-    return top ? top.Rank : null
-  }, [cards, level, is_tribute_mode])
-
-  const is_valid_tribute_selection = useMemo(() => {
-    if (selected_ids.size !== 1) return false
-    const card = cards.find(c => c.Id === Array.from(selected_ids)[0])
-    if (!card) return false
-    if (is_tribute_mode === 'give') {
-      if (is_wild(card, level)) return false
-      if (required_tribute_rank === null) return false
-      return card.Rank === required_tribute_rank
-    }
-    if (is_tribute_mode === 'return') return card.Rank <= Rank_Ten && !is_wild(card, level)
-    return false
-  }, [selected_ids, cards, level, is_tribute_mode, required_tribute_rank])
+  // Clicking empty space (not a card) clears the selection
+  const handle_background_click = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return
+    if (swiped_cards.current.size > 0) return
+    on_clear_selection()
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', position: 'relative' }}>
       {/* Cards area with swipe detection */}
       <div
+        onClick={handle_background_click}
         onMouseDown={handle_swipe_start}
         onMouseMove={handle_swipe_move}
         onMouseUp={handle_swipe_end}
@@ -346,7 +328,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           userSelect: 'none',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+        <div onClick={handle_background_click} style={{ display: 'flex', alignItems: 'flex-end' }}>
           {columns.map((col, col_idx) => {
             const col_cards = col.card_ids.map(id => card_by_id.get(id)!).filter(Boolean)
             const col_height = card_height + (col_cards.length - 1) * v_overlap
@@ -408,29 +390,19 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
         </div>
       </div>
 
-      {/* Suit filter buttons + action buttons */}
+      {/* Floating helper cluster - bottom right corner, over the hand area */}
       <div style={{
+        position: 'absolute',
+        right: is_mobile ? 4 : 10,
+        bottom: is_mobile ? 4 : 8,
         display: 'flex',
-        gap: is_mobile ? 5 : 10,
-        marginTop: is_mobile ? 3 : 8,
-        justifyContent: 'center',
+        gap: is_mobile ? 4 : 6,
         alignItems: 'center',
-        flexWrap: 'wrap',
+        padding: is_mobile ? '3px 5px' : '5px 7px',
+        backgroundColor: 'rgba(0, 0, 0, 0.55)',
+        borderRadius: 8,
+        zIndex: 60,
       }}>
-        {/* Turn indicator - mobile only, in the row */}
-        {is_mobile && is_my_turn && cards.length > 0 && (
-          <div style={{
-            padding: '4px 10px',
-            backgroundColor: '#ffc107',
-            color: '#000',
-            borderRadius: 4,
-            fontWeight: 'bold',
-            fontSize: 11,
-          }}>
-            My turn
-          </div>
-        )}
-
         {/* Suit buttons - available in tribute mode for SF detection, or when SF exists in normal mode */}
         <div style={{ display: 'flex', gap: is_mobile ? 3 : 6 }}>
           {[
@@ -447,19 +419,18 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
               disabled={!suit_enabled}
               title={suit_enabled ? `Select all ${symbol} cards` : `No straight flush in ${symbol}`}
               style={{
-                width: is_mobile ? 26 : 34,
-                height: is_mobile ? 26 : 34,
-                fontSize: is_mobile ? 14 : 20,
-                backgroundColor: suit_enabled ? '#fff' : '#f0f0f0',
-                color: suit_enabled ? color : '#ccc',
-                border: '1px solid #ccc',
+                width: is_mobile ? 26 : 32,
+                height: is_mobile ? 26 : 32,
+                fontSize: is_mobile ? 14 : 18,
+                backgroundColor: suit_enabled ? '#fff' : 'rgba(255,255,255,0.12)',
+                color: suit_enabled ? color : 'rgba(255,255,255,0.3)',
+                border: 'none',
                 borderRadius: 4,
                 cursor: suit_enabled ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 0,
-                opacity: suit_enabled ? 1 : 0.5,
               }}
             >
               {symbol}
@@ -467,18 +438,16 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           )})}
         </div>
 
-        {/* Divider */}
-        {!is_tribute_mode && <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />}
-
-        {/* Action buttons - hidden in tribute mode */}
+        {/* Pile/Reset - hidden in tribute mode */}
         {!is_tribute_mode && (
           <>
+            <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: 'rgba(255,255,255,0.25)' }} />
             <button
               onClick={handle_create_pile}
               disabled={!is_valid_pile}
               title={selected_ids.size === 0 ? 'Select cards' : is_valid_pile ? 'Create pile' : 'Invalid combo'}
               style={{
-                padding: is_mobile ? '4px 8px' : '8px 14px',
+                padding: is_mobile ? '4px 8px' : '7px 12px',
                 fontSize: is_mobile ? 11 : 13,
                 backgroundColor: is_valid_pile ? '#9c27b0' : '#444',
                 color: '#fff',
@@ -494,7 +463,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
               onClick={handle_reset}
               disabled={custom_columns.size === 0}
               style={{
-                padding: is_mobile ? '4px 8px' : '8px 14px',
+                padding: is_mobile ? '4px 8px' : '7px 12px',
                 fontSize: is_mobile ? 11 : 13,
                 backgroundColor: custom_columns.size > 0 ? '#607d8b' : '#444',
                 color: '#fff',
@@ -508,50 +477,6 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
             </button>
           </>
         )}
-
-        {/* Divider - hidden in tribute mode */}
-        {!is_tribute_mode && <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: '#555' }} />}
-
-        {/* Play/Pass buttons */}
-        {!is_tribute_mode && <button
-          onClick={on_pass}
-          disabled={!is_my_turn || !can_pass || cards.length === 0}
-          style={{
-            padding: is_mobile ? '4px 10px' : '8px 16px',
-            fontSize: is_mobile ? 12 : 14,
-            backgroundColor: is_my_turn && can_pass && cards.length > 0 ? '#dc3545' : '#444',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            cursor: is_my_turn && can_pass && cards.length > 0 ? 'pointer' : 'default',
-            opacity: is_my_turn && can_pass && cards.length > 0 ? 1 : 0.5,
-          }}
-        >
-          Pass
-        </button>}
-
-        {/* Play button (or Tribute button in tribute mode) */}
-        <button
-          onClick={on_play}
-          disabled={is_tribute_mode ? !is_valid_tribute_selection : (!is_my_turn || selected_ids.size === 0 || cards.length === 0)}
-          style={{
-            padding: is_mobile ? '4px 14px' : '8px 24px',
-            fontSize: is_mobile ? 13 : 15,
-            fontWeight: 'bold',
-            backgroundColor: is_tribute_mode
-              ? (is_valid_tribute_selection ? '#ffc107' : '#444')
-              : (is_my_turn && selected_ids.size > 0 && cards.length > 0 ? '#28a745' : '#444'),
-            color: is_tribute_mode ? '#000' : '#fff',
-            border: 'none',
-            borderRadius: 4,
-            cursor: is_tribute_mode
-              ? (is_valid_tribute_selection ? 'pointer' : 'default')
-              : (is_my_turn && selected_ids.size > 0 && cards.length > 0 ? 'pointer' : 'default'),
-            opacity: (is_tribute_mode ? is_valid_tribute_selection : (is_my_turn && selected_ids.size > 0 && cards.length > 0)) ? 1 : 0.5,
-          }}
-        >
-          {is_tribute_mode ? 'Tribute' : 'Play'}
-        </button>
       </div>
     </div>
   )

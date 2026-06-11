@@ -1,8 +1,10 @@
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Black_Joker, Rank_Red_Joker } from '../game/types'
+import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Ten, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
 import { use_is_mobile } from '../hooks/use_is_mobile'
+import { get_rank_value } from '../game/combos'
 
 interface Player_Play {
   cards: Card_Type[]
@@ -54,6 +56,7 @@ interface Game_Props {
   tribute_target_name?: string
   on_tribute?: () => void
   received_tribute_card?: Card_Type | null
+  on_leave: () => void
 }
 
 export function Game({
@@ -78,6 +81,7 @@ export function Game({
   tribute_target_name,
   on_tribute,
   received_tribute_card,
+  on_leave,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
@@ -102,6 +106,32 @@ export function Game({
     // No-op in tribute mode
   }
 
+  const required_tribute_rank = useMemo((): Rank | null => {
+    if (is_tribute_mode !== 'give') return null
+    const eligible = hand.filter(c => !is_wild(c, level))
+    if (eligible.length === 0) return null
+    const max_value = Math.max(...eligible.map(c => get_rank_value(c.Rank, level)))
+    const top = eligible.find(c => get_rank_value(c.Rank, level) === max_value)
+    return top ? top.Rank : null
+  }, [hand, level, is_tribute_mode])
+
+  const is_valid_tribute_selection = useMemo(() => {
+    if (selected_ids.size !== 1) return false
+    const card = hand.find(c => c.Id === Array.from(selected_ids)[0])
+    if (!card) return false
+    if (is_tribute_mode === 'give') {
+      if (is_wild(card, level)) return false
+      if (required_tribute_rank === null) return false
+      return card.Rank === required_tribute_rank
+    }
+    if (is_tribute_mode === 'return') return card.Rank <= Rank_Ten && !is_wild(card, level)
+    return false
+  }, [selected_ids, hand, level, is_tribute_mode, required_tribute_rank])
+
+  const can_play = is_my_turn && selected_ids.size > 0 && hand.length > 0
+  const pass_enabled = is_my_turn && can_pass && hand.length > 0
+  const show_actions = hand.length > 0 && (is_tribute_mode ? true : is_my_turn)
+
   return (
     <div style={is_mobile ? mobile_styles.container : styles.container}>
       {/* Info bar */}
@@ -109,14 +139,33 @@ export function Game({
         <div style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
           Lvl: {get_rank_symbol(level)}
         </div>
-        <div style={is_mobile ? mobile_styles.team_scores : styles.team_scores}>
-          <span style={{ color: '#64b5f6' }}>T1: {get_rank_symbol(team_levels[0] as Rank)}</span>
-          <span style={{ marginLeft: is_mobile ? 8 : 12, color: '#f48fb1' }}>T2: {get_rank_symbol(team_levels[1] as Rank)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: is_mobile ? 8 : 12 }}>
+          <div style={is_mobile ? mobile_styles.team_scores : styles.team_scores}>
+            <span style={{ color: '#64b5f6' }}>T1: {get_rank_symbol(team_levels[0] as Rank)}</span>
+            <span style={{ marginLeft: is_mobile ? 8 : 12, color: '#f48fb1' }}>T2: {get_rank_symbol(team_levels[1] as Rank)}</span>
+          </div>
+          <button
+            onClick={() => { if (window.confirm('Leave the game? Your seat is held for 60 seconds.')) on_leave() }}
+            style={{
+              padding: is_mobile ? '2px 8px' : '3px 10px',
+              fontSize: is_mobile ? 10 : 12,
+              backgroundColor: 'transparent',
+              color: '#e57373',
+              border: '1px solid #e57373',
+              borderRadius: 4,
+              cursor: 'pointer',
+            }}
+          >
+            Leave
+          </button>
         </div>
       </div>
 
       {/* Game area - relative container with absolute positioned elements */}
-      <div style={is_mobile ? mobile_styles.game_area : styles.game_area}>
+      <div
+        style={is_mobile ? mobile_styles.game_area : styles.game_area}
+        onClick={(e) => { if (e.target === e.currentTarget) on_clear_selection() }}
+      >
         {/* Top player badge + cards */}
         <Player_Badge
           seat={relative_positions.top}
@@ -182,6 +231,59 @@ export function Game({
           level={level}
           is_mobile={is_mobile}
         />
+
+        {/* Turn actions - centered between table and hand, only when it's my turn */}
+        {show_actions && (
+          <div style={{
+            position: 'absolute',
+            bottom: is_mobile ? 8 : 14,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            zIndex: 40,
+            pointerEvents: 'none',
+          }}>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex',
+              gap: is_mobile ? 10 : 16,
+              pointerEvents: 'auto',
+            }}
+          >
+            {is_tribute_mode ? (
+              <Action_Button
+                label="Tribute"
+                enabled={is_valid_tribute_selection}
+                color="#ffc107"
+                text_color="#000"
+                on_click={on_tribute!}
+                is_mobile={is_mobile}
+              />
+            ) : (
+              <>
+                <Action_Button
+                  label="Pass"
+                  enabled={pass_enabled}
+                  color="#dc3545"
+                  on_click={on_pass}
+                  is_mobile={is_mobile}
+                />
+                <Action_Button
+                  label="Play"
+                  enabled={can_play}
+                  color="#28a745"
+                  on_click={on_play}
+                  is_mobile={is_mobile}
+                />
+              </>
+            )}
+          </motion.div>
+          </div>
+        )}
       </div>
 
       {/* Tribute instruction - centered on screen */}
@@ -237,23 +339,9 @@ export function Game({
           on_toggle_selection={original_on_card_click}
           on_select_same_rank={is_tribute_mode ? tribute_select_same_rank : on_select_same_rank}
           on_clear_selection={on_clear_selection}
-          on_play={is_tribute_mode ? on_tribute! : on_play}
-          on_pass={on_pass}
-          is_my_turn={!is_tribute_mode && is_my_turn}
-          can_pass={can_pass}
           is_tribute_mode={is_tribute_mode}
         />
 
-        {/* Turn indicator - desktop only (mobile shows in Hand button row) */}
-        {!is_mobile && is_my_turn && hand.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={styles.turn_indicator}
-          >
-            Your turn!
-          </motion.div>
-        )}
         {hand.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -265,6 +353,38 @@ export function Game({
         )}
       </div>
     </div>
+  )
+}
+
+interface Action_Button_Props {
+  label: string
+  enabled: boolean
+  color: string
+  text_color?: string
+  on_click: () => void
+  is_mobile: boolean
+}
+
+function Action_Button({ label, enabled, color, text_color = '#fff', on_click, is_mobile }: Action_Button_Props) {
+  return (
+    <motion.button
+      whileTap={enabled ? { scale: 0.95 } : undefined}
+      onClick={on_click}
+      disabled={!enabled}
+      style={{
+        padding: is_mobile ? '7px 22px' : '10px 32px',
+        fontSize: is_mobile ? 13 : 15,
+        fontWeight: 'bold',
+        backgroundColor: enabled ? color : 'rgba(60,60,60,0.85)',
+        color: enabled ? text_color : 'rgba(255,255,255,0.4)',
+        border: '1px solid rgba(255,255,255,0.25)',
+        borderRadius: 999,
+        cursor: enabled ? 'pointer' : 'default',
+        boxShadow: enabled ? '0 3px 8px rgba(0,0,0,0.4)' : 'none',
+      }}
+    >
+      {label}
+    </motion.button>
   )
 }
 
@@ -529,7 +649,7 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-    bottom: is_mobile ? 8 : 16,
+    bottom: is_mobile ? 48 : 70,
     left: '50%',
     transform: 'translateX(-50%)',
   }
@@ -649,8 +769,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 0,
+    paddingBottom: 2,
     borderTop: '1px solid rgba(255,255,255,0.1)',
     flexShrink: 0,
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -708,8 +828,8 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: 2,
-    paddingBottom: 4,
+    paddingTop: 0,
+    paddingBottom: 2,
     flexShrink: 0,
   },
   turn_indicator: {

@@ -1,52 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Player_Info } from '../game/types'
+import { use_is_mobile } from '../hooks/use_is_mobile'
 
 interface Lobby_Props {
-    room_id: string | null
+    room_id: string
     players: Player_Info[]
-    on_create_room: (name: string) => void
-    on_join_room: (room_id: string, name: string) => void
     on_fill_bots: () => void
     on_start_game: () => void
     on_pick_seat: (seat: number) => void
     on_ready: () => void
-    pending_room_id: string | null
+    on_leave: () => void
     is_host: boolean
     my_seat: number
 }
 
-export function Lobby({ room_id, players, on_create_room, on_join_room, on_fill_bots, on_start_game, on_pick_seat, on_ready, pending_room_id, is_host, my_seat }: Lobby_Props) {
-    const [name, set_name] = useState('')
-    const [join_code, set_join_code] = useState('')
-    const [mode, set_mode] = useState<'select' | 'create' | 'join'>('select')
+export function Lobby({ room_id, players, on_fill_bots, on_start_game, on_pick_seat, on_ready, on_leave, is_host, my_seat }: Lobby_Props) {
     const [copied, set_copied] = useState(false)
+    const is_mobile = use_is_mobile()
+    const styles = is_mobile ? { ...desktop_styles, ...mobile_styles } : desktop_styles
 
-    useEffect(() => {
-        if (pending_room_id) {
-            set_mode('join')
-            set_join_code(pending_room_id)
-        }
-    }, [pending_room_id])
+    const me = players.find(p => p.seat === my_seat)
+    const all_ready = players.length > 0 && players.every(p => p.is_ready)
+    const human_count = players.length
 
-    const handle_create = () => {
-        if (name.trim()) {
-            on_create_room(name.trim())
-        }
-    }
-
-    const handle_join = () => {
-        if (name.trim() && join_code.trim()) {
-            on_join_room(join_code.trim(), name.trim())
-        }
-    }
-
-    if (room_id) {
-        const me = players.find(p => p.seat === my_seat)
-        const all_ready = players.length > 0 && players.every(p => p.is_ready)
-        const human_count = players.length
-
-        return (
+    return (
             <div style={styles.container}>
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -159,134 +137,30 @@ export function Lobby({ room_id, players, on_create_room, on_join_room, on_fill_
                                 </motion.button>
                             </>
                         )}
+
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={on_leave}
+                            style={{ ...styles.button, backgroundColor: '#dc3545' }}
+                        >
+                            Leave
+                        </motion.button>
                     </div>
 
                     <p style={styles.hint}>Share the invite link with friends to join</p>
                 </motion.div>
             </div>
-        )
-    }
-
-    return (
-        <div style={styles.container}>
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={styles.card}
-            >
-                <h1 style={styles.logo}>掼蛋</h1>
-                <h2 style={styles.title}>Guan Dan</h2>
-
-                {mode === 'select' && (
-                    <div style={styles.buttons}>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => set_mode('create')}
-                            style={styles.button}
-                        >
-                            Create Room
-                        </motion.button>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => set_mode('join')}
-                            style={{ ...styles.button, backgroundColor: '#28a745' }}
-                        >
-                            Join Room
-                        </motion.button>
-                    </div>
-                )}
-
-                {mode === 'create' && (
-                    <div style={styles.form}>
-                        <input
-                            type="text"
-                            placeholder="Your name"
-                            value={name}
-                            onChange={(e) => set_name(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handle_create()}
-                            style={styles.input}
-                            autoFocus
-                        />
-                        <div style={styles.buttons}>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handle_create}
-                                style={styles.button}
-                            >
-                                Create
-                            </motion.button>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => set_mode('select')}
-                                style={{ ...styles.button, backgroundColor: '#6c757d' }}
-                            >
-                                Back
-                            </motion.button>
-                        </div>
-                    </div>
-                )}
-
-                {mode === 'join' && (
-                    <div style={styles.form}>
-                        <input
-                            type="text"
-                            placeholder="Your name"
-                            value={name}
-                            onChange={(e) => set_name(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handle_join()}
-                            style={styles.input}
-                            autoFocus
-                        />
-                        {!pending_room_id && (
-                            <input
-                                type="text"
-                                placeholder="Room code"
-                                value={join_code}
-                                onChange={(e) => set_join_code(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handle_join()}
-                                style={styles.input}
-                            />
-                        )}
-                        <div style={styles.buttons}>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handle_join}
-                                style={{ ...styles.button, backgroundColor: '#28a745' }}
-                            >
-                                Join
-                            </motion.button>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => {
-                                    set_mode('select')
-                                    if (pending_room_id) {
-                                        window.history.replaceState({}, '', '/')
-                                    }
-                                }}
-                                style={{ ...styles.button, backgroundColor: '#6c757d' }}
-                            >
-                                Back
-                            </motion.button>
-                        </div>
-                    </div>
-                )}
-            </motion.div>
-        </div>
     )
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const desktop_styles: Record<string, React.CSSProperties> = {
     container: {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        minHeight: '100vh',
+        height: '100dvh',
+        overflowY: 'auto',
         backgroundColor: '#1a1a2e',
     },
     card: {
@@ -296,11 +170,8 @@ const styles: Record<string, React.CSSProperties> = {
         textAlign: 'center',
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
         minWidth: 360,
-    },
-    logo: {
-        fontSize: 64,
-        margin: 0,
-        color: '#fff',
+        maxWidth: '95vw',
+        margin: 'auto',
     },
     title: {
         color: '#fff',
@@ -321,20 +192,6 @@ const styles: Record<string, React.CSSProperties> = {
         backgroundColor: '#007bff',
         color: '#fff',
         cursor: 'pointer',
-    },
-    form: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        gap: 12,
-    },
-    input: {
-        padding: '12px 16px',
-        fontSize: 16,
-        border: '2px solid #333',
-        borderRadius: 8,
-        backgroundColor: '#0f3460',
-        color: '#fff',
-        outline: 'none',
     },
     players_grid: {
         display: 'grid',
@@ -396,5 +253,90 @@ const styles: Record<string, React.CSSProperties> = {
     copy_hint: {
         color: '#888',
         fontSize: 11,
+    },
+}
+
+// Compact overrides so the lobby fits landscape phones (~390px tall)
+const mobile_styles: Record<string, React.CSSProperties> = {
+    card: {
+        backgroundColor: '#16213e',
+        padding: '14px 18px',
+        borderRadius: 12,
+        textAlign: 'center',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        maxWidth: '95vw',
+        margin: 'auto',
+    },
+    title: {
+        color: '#fff',
+        fontSize: 18,
+        marginTop: 2,
+        marginBottom: 10,
+    },
+    button: {
+        padding: '8px 14px',
+        fontSize: 14,
+        border: 'none',
+        borderRadius: 8,
+        backgroundColor: '#007bff',
+        color: '#fff',
+        cursor: 'pointer',
+    },
+    players_grid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: 8,
+        marginBottom: 10,
+    },
+    player_slot: {
+        padding: 8,
+        borderRadius: 8,
+        border: '2px solid',
+        minHeight: 54,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 2,
+    },
+    team_label: {
+        fontSize: 9,
+        color: '#888',
+        textTransform: 'uppercase' as const,
+        letterSpacing: 1,
+    },
+    player_name: {
+        fontWeight: 'bold',
+        color: '#fff',
+        fontSize: 13,
+    },
+    ready_status: {
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    empty_slot: {
+        color: '#666',
+        fontSize: 12,
+    },
+    invite_link: {
+        backgroundColor: '#0f3460',
+        padding: '6px 10px',
+        borderRadius: 8,
+        marginBottom: 10,
+        cursor: 'pointer',
+        border: '1px solid #333',
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: 2,
+    },
+    invite_text: {
+        color: '#7ec8e3',
+        fontSize: 12,
+        fontFamily: 'monospace',
+    },
+    hint: {
+        color: '#666',
+        fontSize: 10,
+        marginTop: 8,
     },
 }

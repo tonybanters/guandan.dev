@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { use_websocket } from './hooks/use_websocket'
+import { Home } from './components/Home'
 import { Lobby } from './components/Lobby'
 import { Game } from './components/Game'
 import {
@@ -79,7 +80,10 @@ function get_room_id_from_url(): string | null {
 
 export default function App() {
   const ws_url = get_ws_url()
-  const { connected, reconnecting, send, on } = use_websocket(ws_url)
+  const { connected, reconnecting, send, on, logout, saved_session, try_reconnect } = use_websocket(ws_url)
+  // Set when "Practice vs Bots" is clicked: on the first room_state after
+  // creating the room, auto-fill bots and start immediately.
+  const practice_pending = useRef(false)
 
   const [pending_room_id] = useState<string | null>(get_room_id_from_url)
   const [room_id, set_room_id] = useState<string | null>(null)
@@ -124,6 +128,14 @@ export default function App() {
         pmap[p.seat] = p.name
       })
       set_players_map(pmap)
+
+      // Practice mode: room just created, fill with bots and start right away
+      // (the server lets the host start without readying up)
+      if (practice_pending.current && payload.is_host && !payload.game_active) {
+        practice_pending.current = false
+        send({ type: 'fill_bots', payload: {} })
+        send({ type: 'start_game', payload: {} })
+      }
     })
 
     const unsub_deal = on('deal_cards', (msg: Message) => {
@@ -281,7 +293,7 @@ export default function App() {
       unsub_player_disconnected()
       unsub_player_reconnected()
     }
-  }, [on, level])
+  }, [on, send, level])
 
   const handle_create_room = useCallback(
     (name: string) => {
@@ -318,6 +330,24 @@ export default function App() {
   const handle_ready = useCallback(() => {
     send({ type: 'ready', payload: {} })
   }, [send])
+
+  // Leave the room: clear the saved session so we don't auto-reconnect,
+  // then reload at the homepage. The server removes us when the socket closes.
+  const handle_leave = useCallback(() => {
+    logout()
+    window.location.href = '/'
+  }, [logout])
+
+  const handle_practice = useCallback(
+    (name: string) => {
+      practice_pending.current = true
+      send({
+        type: 'create_room',
+        payload: { player_name: name },
+      })
+    },
+    [send]
+  )
 
   const handle_card_click = useCallback((id: number) => {
     set_selected_ids((prev) => {
@@ -398,19 +428,29 @@ export default function App() {
   if (!game_active) {
     return (
       <>
-        <Lobby
-          room_id={room_id}
-          players={players}
-          on_create_room={handle_create_room}
-          on_join_room={handle_join_room}
-          on_fill_bots={handle_fill_bots}
-          on_start_game={handle_start_game}
-          on_pick_seat={handle_pick_seat}
-          on_ready={handle_ready}
-          pending_room_id={pending_room_id}
-          is_host={is_host}
-          my_seat={my_seat}
-        />
+        {room_id ? (
+          <Lobby
+            room_id={room_id}
+            players={players}
+            on_fill_bots={handle_fill_bots}
+            on_start_game={handle_start_game}
+            on_pick_seat={handle_pick_seat}
+            on_ready={handle_ready}
+            on_leave={handle_leave}
+            is_host={is_host}
+            my_seat={my_seat}
+          />
+        ) : (
+          <Home
+            pending_room_id={pending_room_id}
+            session_room_id={saved_session?.room_id ?? null}
+            on_rejoin={try_reconnect}
+            on_discard_session={logout}
+            on_create_room={handle_create_room}
+            on_join_room={handle_join_room}
+            on_practice={handle_practice}
+          />
+        )}
         {error && <div style={styles.error}>{error}</div>}
       </>
     )
@@ -442,6 +482,7 @@ export default function App() {
         tribute_target_name={tribute_target !== null ? (players_map[tribute_target] || `Player ${tribute_target + 1}`) : (return_target !== null ? (players_map[return_target] || `Player ${return_target + 1}`) : undefined)}
         on_tribute={handle_tribute_play}
         received_tribute_card={received_tribute_card}
+        on_leave={handle_leave}
       />
       {error && <div style={styles.error}>{error}</div>}
     </>

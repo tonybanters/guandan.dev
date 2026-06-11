@@ -17,33 +17,35 @@ interface Card_Props {
 export const CARD_CONFIG = {
     hand: {
         small: {
-            width: 65, height: 67,
-            rank_font: 18, suit_font: 16,
-            center_font: 40, center_top: '65%', center_left: '65%',
-            h_visible: 45, v_overlap: 20,
+            width: 66, height: 84,
+            rank_font: 19, suit_font: 16,
+            center_font: 44, center_top: '65%', center_left: '65%',
+            h_visible: 44, v_overlap: 24,
         },
         normal: {
-            width: 65, height: 67,
-            rank_font: 18, suit_font: 16,
-            center_font: 40, center_top: '65%', center_left: '65%',
-            h_visible: 45, v_overlap: 20,
+            width: 80, height: 100,
+            rank_font: 24, suit_font: 20,
+            center_font: 54, center_top: '65%', center_left: '65%',
+            h_visible: 52, v_overlap: 30,
         },
     },
     table: {
         small: {
-            width: 45, height: 55,
-            rank_font: 15, suit_font: 13,
-            center_font: 20, center_top: '60%', center_left: '70%',
+            width: 50, height: 64,
+            rank_font: 16, suit_font: 14,
+            center_font: 22, center_top: '60%', center_left: '70%',
             h_visible: 20, v_overlap: 0,
         },
         normal: {
-            width: 55, height: 67,
-            rank_font: 17, suit_font: 15,
-            center_font: 20, center_top: '60%', center_left: '70%',
-            h_visible: 20, v_overlap: 0,
+            width: 64, height: 84,
+            rank_font: 20, suit_font: 17,
+            center_font: 26, center_top: '60%', center_left: '70%',
+            h_visible: 22, v_overlap: 0,
         },
     },
 }
+
+const CARD_FONT = "'Iosevka Nerd Font', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
 export function Card({ card, level, selected, on_click, size = 'normal', context = 'hand' }: Card_Props) {
     const is_joker = card.Suit === Suit_Joker
@@ -63,13 +65,14 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
             style={{
                 width: cfg.width,
                 height: cfg.height,
-                backgroundColor: is_wild_card ? '#fff3cd' : '#fff',
-                border: is_wild_card ? '2px solid #ffc107' : '1px solid #ccc',
-                borderRadius: 6,
+                background: is_wild_card
+                    ? 'linear-gradient(165deg, #fffdf2 0%, #ffeeba 100%)'
+                    : 'linear-gradient(165deg, #ffffff 0%, #f1f1f4 100%)',
+                border: is_wild_card ? '1px solid #e6ae06' : '1px solid #c9c9d0',
                 position: 'relative',
                 cursor: 'pointer',
                 userSelect: 'none',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                 overflow: 'hidden',
             }}
         >
@@ -83,7 +86,6 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
                         right: 0,
                         bottom: 0,
                         backgroundColor: 'rgba(156, 39, 176, 0.35)',
-                        borderRadius: 5,
                         pointerEvents: 'none',
                         zIndex: 10,
                     }}
@@ -105,8 +107,9 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
                 <span
                     style={{
                         fontSize: cfg.rank_font,
+                        fontFamily: CARD_FONT,
                         fontWeight: 'bold',
-                        color: is_red ? '#dc3545' : '#000',
+                        color: is_red ? '#d22b2b' : '#1a1a1a',
                         lineHeight: 1,
                     }}
                 >
@@ -116,7 +119,7 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
                     <span
                         style={{
                             fontSize: cfg.suit_font,
-                            color: is_red ? '#dc3545' : '#000',
+                            color: is_red ? '#d22b2b' : '#1a1a1a',
                             lineHeight: 1,
                         }}
                     >
@@ -133,11 +136,12 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
                     left: cfg.center_left,
                     transform: 'translate(-50%, -50%)',
                     fontSize: cfg.center_font,
-                    color: is_red ? '#dc3545' : '#000',
-                    opacity: 0.9,
+                    color: is_red ? '#d22b2b' : '#1a1a1a',
+                    opacity: 0.85,
+                    textShadow: '0 1px 1px rgba(0,0,0,0.15)',
                 }}
             >
-                {suit_display}
+                {is_joker ? '★' : suit_display}
             </div>
         </div>
     )
@@ -158,7 +162,6 @@ export function Card_Back({ size = 'normal', context = 'hand' }: Card_Back_Props
                 height: cfg.height,
                 backgroundColor: '#1e3a5f',
                 border: '1px solid #0d1b2a',
-                borderRadius: 6,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

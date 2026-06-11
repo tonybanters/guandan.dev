@@ -4,6 +4,13 @@ import App from './App'
 
 const style = document.createElement('style')
 style.textContent = `
+  @font-face {
+    font-family: 'Iosevka Nerd Font';
+    src: url('/fonts/IosevkaNerdFont-Bold.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+  }
   * {
     margin: 0;
     padding: 0;

@@ -1,0 +1,351 @@
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { use_is_mobile } from '../hooks/use_is_mobile'
+
+const NAME_KEY = 'guandan_name'
+
+function get_saved_name(): string {
+    try {
+        return localStorage.getItem(NAME_KEY) || ''
+    } catch {
+        return ''
+    }
+}
+
+interface Home_Props {
+    pending_room_id: string | null
+    session_room_id: string | null
+    on_rejoin: () => void
+    on_discard_session: () => void
+    on_create_room: (name: string) => void
+    on_join_room: (room_id: string, name: string) => void
+    on_practice: (name: string) => void
+}
+
+export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_session, on_create_room, on_join_room, on_practice }: Home_Props) {
+    const [name, set_name] = useState(get_saved_name)
+    const [join_code, set_join_code] = useState('')
+    const [view, set_view] = useState<'menu' | 'friends'>('menu')
+    const is_mobile = use_is_mobile()
+    const styles = is_mobile ? { ...desktop_styles, ...mobile_styles } : desktop_styles
+
+    const has_name = name.trim().length > 0
+
+    const handle_name_change = (value: string) => {
+        set_name(value)
+        try {
+            localStorage.setItem(NAME_KEY, value.trim())
+        } catch {
+            // ignore
+        }
+    }
+
+    const handle_join_pending = () => {
+        if (has_name && pending_room_id) {
+            on_join_room(pending_room_id, name.trim())
+        }
+    }
+
+    const handle_join_code = () => {
+        if (has_name && join_code.trim()) {
+            on_join_room(join_code.trim(), name.trim())
+        }
+    }
+
+    const disabled_style: React.CSSProperties = { opacity: 0.5, cursor: 'not-allowed' }
+
+    return (
+        <div style={styles.container}>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={styles.card}
+            >
+                <h1 style={styles.logo}>掼蛋</h1>
+                <h2 style={styles.title}>Guan Dan</h2>
+
+                <input
+                    type="text"
+                    placeholder="Your name"
+                    value={name}
+                    onChange={(e) => handle_name_change(e.target.value)}
+                    style={styles.input}
+                    maxLength={20}
+                />
+
+                {/* Rejoin banner - a previous game session exists */}
+                {session_room_id && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        style={styles.rejoin_banner}
+                    >
+                        <div style={styles.rejoin_text}>Game in progress in room {session_room_id}</div>
+                        <div style={styles.rejoin_buttons}>
+                            <button onClick={on_rejoin} style={{ ...styles.small_button, backgroundColor: '#28a745' }}>
+                                Rejoin
+                            </button>
+                            <button onClick={on_discard_session} style={{ ...styles.small_button, backgroundColor: '#6c757d' }}>
+                                Discard
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Invite link landed here - offer to join that room directly
+                    (unless the rejoin banner already points at the same room) */}
+                {pending_room_id && pending_room_id !== session_room_id && (
+                    <motion.button
+                        whileHover={has_name ? { scale: 1.03 } : undefined}
+                        whileTap={has_name ? { scale: 0.97 } : undefined}
+                        onClick={handle_join_pending}
+                        style={{
+                            ...styles.menu_button,
+                            backgroundColor: '#28a745',
+                            ...(has_name ? {} : disabled_style),
+                        }}
+                    >
+                        Join Room {pending_room_id}
+                    </motion.button>
+                )}
+
+                {view === 'menu' && (
+                    <>
+                        <motion.button
+                            whileHover={has_name ? { scale: 1.03 } : undefined}
+                            whileTap={has_name ? { scale: 0.97 } : undefined}
+                            onClick={() => { if (has_name) set_view('friends') }}
+                            style={{ ...styles.menu_button, ...(has_name ? {} : disabled_style) }}
+                        >
+                            Play with Friends
+                        </motion.button>
+                        <motion.button
+                            whileHover={has_name ? { scale: 1.03 } : undefined}
+                            whileTap={has_name ? { scale: 0.97 } : undefined}
+                            onClick={() => { if (has_name) on_practice(name.trim()) }}
+                            style={{
+                                ...styles.menu_button,
+                                backgroundColor: '#ff9800',
+                                ...(has_name ? {} : disabled_style),
+                            }}
+                        >
+                            Practice vs Bots
+                        </motion.button>
+                        <button
+                            disabled
+                            style={{ ...styles.menu_button, backgroundColor: '#3a3a4e', ...disabled_style }}
+                        >
+                            Quick Match <span style={styles.soon_tag}>soon</span>
+                        </button>
+                        {!has_name && <p style={styles.hint}>Enter a name to play</p>}
+                    </>
+                )}
+
+                {view === 'friends' && (
+                    <>
+                        <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => on_create_room(name.trim())}
+                            style={styles.menu_button}
+                        >
+                            Create Room
+                        </motion.button>
+                        <div style={styles.join_row}>
+                            <input
+                                type="text"
+                                placeholder="Room code"
+                                value={join_code}
+                                onChange={(e) => set_join_code(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handle_join_code()}
+                                style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+                            />
+                            <motion.button
+                                whileHover={join_code.trim() ? { scale: 1.05 } : undefined}
+                                whileTap={join_code.trim() ? { scale: 0.95 } : undefined}
+                                onClick={handle_join_code}
+                                style={{
+                                    ...styles.small_button,
+                                    backgroundColor: '#28a745',
+                                    ...(join_code.trim() ? {} : disabled_style),
+                                }}
+                            >
+                                Join
+                            </motion.button>
+                        </div>
+                        <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => set_view('menu')}
+                            style={{ ...styles.menu_button, backgroundColor: '#6c757d' }}
+                        >
+                            Back
+                        </motion.button>
+                    </>
+                )}
+            </motion.div>
+        </div>
+    )
+}
+
+const desktop_styles: Record<string, React.CSSProperties> = {
+    container: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100dvh',
+        overflowY: 'auto',
+        backgroundColor: '#1a1a2e',
+    },
+    card: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: 12,
+        backgroundColor: '#16213e',
+        padding: 40,
+        borderRadius: 16,
+        textAlign: 'center',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        width: 360,
+        maxWidth: '95vw',
+        margin: 'auto',
+    },
+    logo: {
+        fontSize: 64,
+        margin: 0,
+        color: '#fff',
+    },
+    title: {
+        color: '#fff',
+        marginTop: 0,
+        marginBottom: 12,
+    },
+    input: {
+        padding: '12px 16px',
+        fontSize: 16,
+        border: '2px solid #333',
+        borderRadius: 8,
+        backgroundColor: '#0f3460',
+        color: '#fff',
+        outline: 'none',
+        textAlign: 'center',
+    },
+    menu_button: {
+        padding: '14px 24px',
+        fontSize: 16,
+        fontWeight: 'bold',
+        border: 'none',
+        borderRadius: 8,
+        backgroundColor: '#007bff',
+        color: '#fff',
+        cursor: 'pointer',
+        width: '100%',
+    },
+    small_button: {
+        padding: '8px 16px',
+        fontSize: 14,
+        border: 'none',
+        borderRadius: 8,
+        color: '#fff',
+        cursor: 'pointer',
+    },
+    join_row: {
+        display: 'flex',
+        gap: 8,
+        alignItems: 'stretch',
+    },
+    rejoin_banner: {
+        backgroundColor: 'rgba(40, 167, 69, 0.12)',
+        border: '1px solid #28a745',
+        borderRadius: 8,
+        padding: 12,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: 8,
+    },
+    rejoin_text: {
+        color: '#7bd88a',
+        fontSize: 14,
+    },
+    rejoin_buttons: {
+        display: 'flex',
+        gap: 8,
+        justifyContent: 'center',
+    },
+    soon_tag: {
+        fontSize: 10,
+        backgroundColor: '#555',
+        color: '#bbb',
+        padding: '2px 6px',
+        borderRadius: 4,
+        marginLeft: 6,
+        verticalAlign: 'middle',
+    },
+    hint: {
+        color: '#666',
+        fontSize: 12,
+        margin: 0,
+    },
+}
+
+// Compact overrides so the home screen fits landscape phones (~390px tall)
+const mobile_styles: Record<string, React.CSSProperties> = {
+    card: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: 8,
+        backgroundColor: '#16213e',
+        padding: '14px 18px',
+        borderRadius: 12,
+        textAlign: 'center',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        width: 340,
+        maxWidth: '95vw',
+        margin: 'auto',
+    },
+    logo: {
+        fontSize: 28,
+        margin: 0,
+        color: '#fff',
+    },
+    title: {
+        color: '#fff',
+        fontSize: 16,
+        marginTop: 0,
+        marginBottom: 4,
+    },
+    input: {
+        padding: '8px 12px',
+        fontSize: 16,
+        border: '2px solid #333',
+        borderRadius: 8,
+        backgroundColor: '#0f3460',
+        color: '#fff',
+        outline: 'none',
+        textAlign: 'center',
+    },
+    menu_button: {
+        padding: '10px 20px',
+        fontSize: 14,
+        fontWeight: 'bold',
+        border: 'none',
+        borderRadius: 8,
+        backgroundColor: '#007bff',
+        color: '#fff',
+        cursor: 'pointer',
+        width: '100%',
+    },
+    rejoin_banner: {
+        backgroundColor: 'rgba(40, 167, 69, 0.12)',
+        border: '1px solid #28a745',
+        borderRadius: 8,
+        padding: 8,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: 6,
+    },
+    rejoin_text: {
+        color: '#7bd88a',
+        fontSize: 12,
+    },
+}
