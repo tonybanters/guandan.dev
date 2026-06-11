@@ -22,6 +22,9 @@ interface Column {
   is_custom: boolean
 }
 
+// straight flush helper buttons are disabled for now, flip to re-enable
+const SHOW_SUIT_BUTTONS: boolean = false
+
 export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, is_tribute_mode }: Hand_Props) {
   const is_mobile = use_is_mobile()
   const last_click = useRef<{ id: number; time: number } | null>(null)
@@ -411,9 +414,10 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
       </div>
 
       {/* Floating helper cluster - bottom right corner, over the hand area */}
+      {(SHOW_SUIT_BUTTONS || !is_tribute_mode) && (
       <div style={{
         position: 'absolute',
-        right: is_mobile ? 4 : 10,
+        right: is_mobile ? 2 : 6,
         bottom: is_mobile ? 4 : 8,
         display: 'flex',
         gap: is_mobile ? 4 : 6,
@@ -424,6 +428,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
         zIndex: 60,
       }}>
         {/* Suit buttons - available in tribute mode for SF detection, or when SF exists in normal mode */}
+        {SHOW_SUIT_BUTTONS && (
         <div style={{ display: 'flex', gap: is_mobile ? 3 : 6 }}>
           {[
             { suit: Suit_Spades, symbol: '♠', color: '#000' },
@@ -457,11 +462,14 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
             </button>
           )})}
         </div>
+        )}
 
         {/* Pile/Reset - hidden in tribute mode */}
         {!is_tribute_mode && (
           <>
-            <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: 'rgba(255,255,255,0.25)' }} />
+            {SHOW_SUIT_BUTTONS && (
+              <div style={{ width: 1, height: is_mobile ? 20 : 24, backgroundColor: 'rgba(255,255,255,0.25)' }} />
+            )}
             <button
               onClick={handle_create_pile}
               disabled={!is_valid_pile}
@@ -498,6 +506,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
           </>
         )}
       </div>
+      )}
     </div>
   )
 }

@@ -68,7 +68,6 @@ export function Game({
   on_clear_selection,
   on_play,
   on_pass,
-  combo_type,
   current_turn,
   my_seat,
   can_pass,
@@ -179,7 +178,6 @@ export function Game({
         <Played_Cards
           play={player_plays[relative_positions.top]}
           is_leading={leading_seat === relative_positions.top}
-          combo_type={leading_seat === relative_positions.top ? combo_type : ''}
           level={level}
           position="top"
           is_mobile={is_mobile}
@@ -198,7 +196,6 @@ export function Game({
         <Played_Cards
           play={player_plays[relative_positions.left]}
           is_leading={leading_seat === relative_positions.left}
-          combo_type={leading_seat === relative_positions.left ? combo_type : ''}
           level={level}
           position="left"
           is_mobile={is_mobile}
@@ -217,7 +214,6 @@ export function Game({
         <Played_Cards
           play={player_plays[relative_positions.right]}
           is_leading={leading_seat === relative_positions.right}
-          combo_type={leading_seat === relative_positions.right ? combo_type : ''}
           level={level}
           position="right"
           is_mobile={is_mobile}
@@ -227,7 +223,6 @@ export function Game({
         <My_Played_Cards
           play={player_plays[my_seat]}
           is_leading={leading_seat === my_seat}
-          combo_type={leading_seat === my_seat ? combo_type : ''}
           level={level}
           is_mobile={is_mobile}
         />
@@ -417,7 +412,7 @@ function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mob
       return {
         ...base,
         left: is_mobile ? 2 : 8,
-        top: '40%',
+        top: '34%',
         transform: 'translateY(-50%)',
       }
     }
@@ -425,7 +420,7 @@ function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mob
     return {
       ...base,
       right: is_mobile ? 2 : 8,
-      top: '40%',
+      top: '56%',
       transform: 'translateY(-50%)',
     }
   }
@@ -518,13 +513,12 @@ function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mob
 interface Played_Cards_Props {
   play?: Player_Play
   is_leading: boolean
-  combo_type: string
   level: Rank
   position: 'top' | 'left' | 'right'
   is_mobile: boolean
 }
 
-function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile }: Played_Cards_Props) {
+function Played_Cards({ play, is_leading, level, position, is_mobile }: Played_Cards_Props) {
   const is_short = use_is_short()
   if (!play) return null
 
@@ -537,7 +531,8 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
       alignItems: 'center',
     }
 
-    // Cards appear toward the center from the badge
+    // All plays share the same centered x so equal-length combos line up;
+    // each player gets their own row, with left/right badges on those rows
     if (position === 'top') {
       return {
         ...base,
@@ -549,17 +544,17 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
     if (position === 'left') {
       return {
         ...base,
-        left: is_mobile ? 45 : 80,
-        top: '40%',
-        transform: 'translateY(-50%)',
+        left: '50%',
+        top: '34%',
+        transform: 'translate(-50%, -50%)',
       }
     }
     // right
     return {
       ...base,
-      right: is_mobile ? 45 : 80,
-      top: '40%',
-      transform: 'translateY(-50%)',
+      left: '50%',
+      top: '56%',
+      transform: 'translate(-50%, -50%)',
     }
   }
 
@@ -617,18 +612,6 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
           </motion.div>
         ))}
       </div>
-      {is_leading && combo_type && (
-        <div style={{
-          marginLeft: is_mobile ? 4 : 8,
-          padding: is_mobile ? '2px 4px' : '3px 8px',
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          color: '#fff',
-          fontSize: is_mobile ? 8 : 12,
-          borderRadius: 4,
-        }}>
-          {combo_type}
-        </div>
-      )}
     </div>
   )
 }
@@ -636,12 +619,11 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
 interface My_Played_Cards_Props {
   play?: Player_Play
   is_leading: boolean
-  combo_type: string
   level: Rank
   is_mobile: boolean
 }
 
-function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_Played_Cards_Props) {
+function My_Played_Cards({ play, is_leading, level, is_mobile }: My_Played_Cards_Props) {
   const is_short = use_is_short()
   if (!play) return null
 
@@ -709,18 +691,6 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
           </motion.div>
         ))}
       </div>
-      {is_leading && combo_type && (
-        <div style={{
-          marginLeft: is_mobile ? 4 : 8,
-          padding: is_mobile ? '2px 4px' : '3px 8px',
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          color: '#fff',
-          fontSize: is_mobile ? 8 : 12,
-          borderRadius: 4,
-        }}>
-          {combo_type}
-        </div>
-      )}
     </div>
   )
 }
