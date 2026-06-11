@@ -20,3 +20,23 @@ export function use_is_mobile(): boolean {
 
   return is_mobile
 }
+
+function check_is_short(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerHeight < 500
+}
+
+export function use_is_short(): boolean {
+  const [is_short, set_is_short] = useState(check_is_short)
+
+  useEffect(() => {
+    const handle_resize = () => {
+      set_is_short(check_is_short())
+    }
+
+    window.addEventListener('resize', handle_resize)
+    return () => window.removeEventListener('resize', handle_resize)
+  }, [])
+
+  return is_short
+}

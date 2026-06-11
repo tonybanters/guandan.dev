@@ -2,7 +2,7 @@ import {
     Card as Card_Type, get_suit_symbol, get_rank_symbol, is_red_suit, is_wild, Rank, Rank_Red_Joker, Suit_Joker
 } from '../game/types'
 
-type Card_Size = 'small' | 'normal'
+type Card_Size = 'tiny' | 'small' | 'normal'
 type Card_Context = 'hand' | 'table'
 
 interface Card_Props {
@@ -16,6 +16,12 @@ interface Card_Props {
 
 export const CARD_CONFIG = {
     hand: {
+        tiny: {
+            width: 56, height: 72,
+            rank_font: 16, suit_font: 14,
+            center_font: 36, center_top: '65%', center_left: '65%',
+            h_visible: 38, v_overlap: 20,
+        },
         small: {
             width: 66, height: 84,
             rank_font: 19, suit_font: 16,
@@ -30,6 +36,12 @@ export const CARD_CONFIG = {
         },
     },
     table: {
+        tiny: {
+            width: 42, height: 54,
+            rank_font: 13, suit_font: 11,
+            center_font: 18, center_top: '60%', center_left: '70%',
+            h_visible: 17, v_overlap: 0,
+        },
         small: {
             width: 50, height: 64,
             rank_font: 16, suit_font: 14,

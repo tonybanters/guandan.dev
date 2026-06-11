@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Card as Card_Type, Rank, get_rank_symbol, Rank_Two, Rank_Ten, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
-import { use_is_mobile } from '../hooks/use_is_mobile'
+import { use_is_mobile, use_is_short } from '../hooks/use_is_mobile'
 import { get_rank_value } from '../game/combos'
 
 interface Player_Play {
@@ -525,6 +525,7 @@ interface Played_Cards_Props {
 }
 
 function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile }: Played_Cards_Props) {
+  const is_short = use_is_short()
   if (!play) return null
 
   const get_position_style = (): React.CSSProperties => {
@@ -579,7 +580,7 @@ function Played_Cards({ play, is_leading, combo_type, level, position, is_mobile
     )
   }
 
-  const table_size = is_mobile ? 'small' as const : 'normal' as const
+  const table_size = is_short ? 'tiny' as const : is_mobile ? 'small' as const : 'normal' as const
   const table_cfg = CARD_CONFIG.table[table_size]
   const card_overlap = -(table_cfg.width - table_cfg.h_visible)
 
@@ -641,6 +642,7 @@ interface My_Played_Cards_Props {
 }
 
 function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_Played_Cards_Props) {
+  const is_short = use_is_short()
   if (!play) return null
 
   const base_style: React.CSSProperties = {
@@ -671,7 +673,7 @@ function My_Played_Cards({ play, is_leading, combo_type, level, is_mobile }: My_
     )
   }
 
-  const table_size = is_mobile ? 'small' as const : 'normal' as const
+  const table_size = is_short ? 'tiny' as const : is_mobile ? 'small' as const : 'normal' as const
   const table_cfg = CARD_CONFIG.table[table_size]
   const card_overlap = -(table_cfg.width - table_cfg.h_visible)
 

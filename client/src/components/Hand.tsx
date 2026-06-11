@@ -30,9 +30,10 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
 
   // Swipe-to-select state
   const [is_swiping, set_is_swiping] = useState(false)
+  const is_swiping_ref = useRef(false)
   const swipe_start = useRef<{ x: number; y: number } | null>(null)
+  const last_point = useRef<{ x: number; y: number } | null>(null)
   const swiped_cards = useRef<Set<number>>(new Set())
-  const card_refs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   // Reset custom columns when a new hand is dealt (hand size increases)
   useEffect(() => {
@@ -242,45 +243,64 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
 
   // Swipe-to-select handlers
   const find_card_at_point = (x: number, y: number): number | null => {
-    for (const [card_id, el] of card_refs.current) {
-      const rect = el.getBoundingClientRect()
-      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        return card_id
-      }
+    const el = document.elementFromPoint(x, y)
+    const card_el = el?.closest('[data-card-id]') as HTMLElement | null
+    if (!card_el) return null
+    const id = Number(card_el.dataset.cardId)
+    return Number.isNaN(id) ? null : id
+  }
+
+  const toggle_at_point = (x: number, y: number) => {
+    const card_id = find_card_at_point(x, y)
+    if (card_id !== null && !swiped_cards.current.has(card_id)) {
+      swiped_cards.current.add(card_id)
+      on_toggle_selection(card_id)
     }
-    return null
   }
 
   const handle_swipe_start = (e: React.MouseEvent | React.TouchEvent) => {
     const point = 'touches' in e ? e.touches[0] : e
     swipe_start.current = { x: point.clientX, y: point.clientY }
+    last_point.current = swipe_start.current
     swiped_cards.current.clear()
+    is_swiping_ref.current = false
     set_is_swiping(false)
   }
 
   const handle_swipe_move = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!swipe_start.current) return
+    if (!swipe_start.current || !last_point.current) return
 
     const point = 'touches' in e ? e.touches[0] : e
-    const dx = Math.abs(point.clientX - swipe_start.current.x)
-    const dy = Math.abs(point.clientY - swipe_start.current.y)
+    const x = point.clientX
+    const y = point.clientY
 
-    // Start swiping if moved more than 5px
-    if (dx > 5 || dy > 5) {
-      set_is_swiping(true)
-    }
-
-    if (is_swiping) {
-      const card_id = find_card_at_point(point.clientX, point.clientY)
-      if (card_id !== null && !swiped_cards.current.has(card_id)) {
-        swiped_cards.current.add(card_id)
-        on_toggle_selection(card_id)
+    if (!is_swiping_ref.current) {
+      const dx = Math.abs(x - swipe_start.current.x)
+      const dy = Math.abs(y - swipe_start.current.y)
+      // Start swiping if moved more than 5px
+      if (dx > 5 || dy > 5) {
+        is_swiping_ref.current = true
+        set_is_swiping(true)
+        toggle_at_point(swipe_start.current.x, swipe_start.current.y)
       }
     }
+
+    if (is_swiping_ref.current) {
+      const prev = last_point.current
+      const dist = Math.hypot(x - prev.x, y - prev.y)
+      const steps = Math.max(1, Math.ceil(dist / 8))
+      for (let i = 1; i <= steps; i++) {
+        toggle_at_point(prev.x + ((x - prev.x) * i) / steps, prev.y + ((y - prev.y) * i) / steps)
+      }
+    }
+
+    last_point.current = { x, y }
   }
 
   const handle_swipe_end = () => {
     swipe_start.current = null
+    last_point.current = null
+    is_swiping_ref.current = false
     set_is_swiping(false)
     // Don't clear swiped_cards here - let click handler check it
     setTimeout(() => swiped_cards.current.clear(), 50)
@@ -357,7 +377,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                     return (
                       <motion.div
                         key={card.Id}
-                        ref={(el) => { if (el) card_refs.current.set(card.Id, el) }}
+                        data-card-id={card.Id}
                         initial={{ opacity: 0, y: 20, scale: 0.8 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -20, scale: 0.8 }}
