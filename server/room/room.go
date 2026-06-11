@@ -8,6 +8,12 @@ import (
 	"guandanbtw/protocol"
 )
 
+const (
+	// how long the finished tribute exchange stays on the table before play starts
+	tribute_display_delay   = 8 * time.Second
+	kang_gong_display_delay = 4 * time.Second
+)
+
 type Play_Action struct {
 	client   *Client
 	card_ids []int
@@ -53,6 +59,7 @@ type Room struct {
 	pick_seat            chan Pick_Seat_Action
 	ready                chan *Client
 	bot_turn             chan int
+	begin_play           chan int
 	reconnect            chan Reconnect_Request
 	expire_disconnected  chan string
 	disconnected_players map[string]*Disconnected_Player
@@ -73,6 +80,7 @@ func new_room(id string) *Room {
 		pick_seat:            make(chan Pick_Seat_Action),
 		ready:                make(chan *Client),
 		bot_turn:             make(chan int),
+		begin_play:           make(chan int),
 		reconnect:            make(chan Reconnect_Request),
 		expire_disconnected:  make(chan string),
 		disconnected_players: make(map[string]*Disconnected_Player),
@@ -121,6 +129,8 @@ func (r *Room) run() {
 			r.handle_fill_bots()
 		case seat := <-r.bot_turn:
 			r.handle_bot_turn(seat)
+		case seat := <-r.begin_play:
+			r.handle_begin_play(seat)
 		}
 	}
 }
@@ -559,6 +569,10 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 		action.client.send_error("you don't need to give tribute")
 		return
 	}
+	if tribute_info.Done {
+		action.client.send_error("tribute already paid")
+		return
+	}
 
 	card := r.game.Get_Card_By_Id(seat, action.card_id)
 	if card == nil {
@@ -706,17 +720,10 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 	r.game.Mark_Return_Done(seat)
 	log.Printf("[DEBUG] handle_tribute_return: marked return done, All_Returns_Done=%v", r.game.All_Returns_Done())
 
-	if r.game.All_Returns_Done() {
-		if r.game.All_Tributes_Done() {
-			first_player := r.game.Determine_First_Player()
-			log.Printf("[DEBUG] handle_tribute_return: all done, first player is seat %d", first_player)
-			r.game.Phase = game.Phase_Play
-			r.game.Current_Turn = first_player
-			r.send_turn_notification()
-			r.trigger_bot_turn_if_needed()
-		} else {
-			r.trigger_bot_tributes()
-		}
+	if r.game.All_Returns_Done() && r.game.All_Tributes_Done() {
+		first_player := r.game.Determine_First_Player()
+		log.Printf("[DEBUG] handle_tribute_return: all done, first player %d starts after display delay", first_player)
+		r.schedule_begin_play(first_player, tribute_display_delay)
 	} else {
 		r.trigger_bot_returns()
 	}
@@ -960,30 +967,97 @@ func (r *Room) setup_tribute() {
 
 	if len(r.game.Tributes) == 0 {
 		log.Printf("[DEBUG] setup_tribute: no tributes, first finisher (seat %d) starts", r.game.Tribute_Leader)
-		r.game.Phase = game.Phase_Play
-		r.game.Current_Turn = r.game.Tribute_Leader
-		r.send_turn_notification()
-		r.trigger_bot_turn_if_needed()
+		r.game.Phase = game.Phase_Tribute
+		r.schedule_begin_play(r.game.Tribute_Leader, kang_gong_display_delay)
 		return
 	}
 
-	log.Printf("[DEBUG] setup_tribute: sending tribute messages")
+	// the tribute is forced (largest non-wild card), so pay it automatically
+	// for everyone; only the returns need a decision
+	log.Printf("[DEBUG] setup_tribute: auto-paying tributes")
 	for _, t := range r.game.Tributes {
-		if r.clients[t.From_Seat] != nil {
-			r.clients[t.From_Seat].send_message(&protocol.Message{
-				Type: protocol.Msg_Tribute,
-				Payload: protocol.Tribute_Payload{
-					From_Seat: t.From_Seat,
-					To_Seat:   t.To_Seat,
-				},
-			})
-		}
+		r.auto_pay_tribute(t.From_Seat, t.To_Seat)
 	}
 
 	log.Printf("[DEBUG] setup_tribute: entering tribute phase")
 	r.game.Phase = game.Phase_Tribute
 
-	r.trigger_bot_tributes()
+	r.trigger_bot_returns()
+}
+
+/*
+ * auto_pay_tribute transfers the payer's largest non-wild card to the
+ * receiver, notifies both hands, broadcasts the public tribute event, and
+ * prompts the receiver for a return.
+ */
+func (r *Room) auto_pay_tribute(from int, to int) {
+	largest_rank, ok := find_largest_tribute_rank(r.game.Hands[from], r.game.Level)
+	if !ok {
+		log.Printf("[DEBUG] auto_pay_tribute: seat %d has no valid tribute card", from)
+		r.game.Mark_Tribute_Done_With_Value(from, 0)
+		return
+	}
+
+	var paid game.Card
+	for _, c := range r.game.Hands[from] {
+		if c.Rank == largest_rank && !game.Is_Wild(c, r.game.Level) {
+			paid = c
+			break
+		}
+	}
+
+	card_value := game.Card_Value(paid, r.game.Level)
+	r.game.Remove_Cards(from, []int{paid.Id})
+	r.game.Hands[to] = append(r.game.Hands[to], paid)
+
+	if r.clients[from] != nil {
+		r.clients[from].send_message(&protocol.Message{
+			Type:    protocol.Msg_Tribute_Give_Ok,
+			Payload: protocol.Tribute_Ok_Payload{Card_Id: paid.Id},
+		})
+	}
+	if r.clients[to] != nil {
+		r.clients[to].send_message(&protocol.Message{
+			Type:    protocol.Msg_Tribute_Recv,
+			Payload: protocol.Tribute_Recv_Payload{Card: paid},
+		})
+	}
+	r.broadcast(&protocol.Message{
+		Type: protocol.Msg_Tribute_Paid,
+		Payload: protocol.Tribute_Public_Payload{
+			From_Seat: from,
+			To_Seat:   to,
+			Card:      paid,
+		},
+	})
+
+	r.game.Mark_Tribute_Done_With_Value(from, card_value)
+
+	if r.clients[to] != nil {
+		r.clients[to].send_message(&protocol.Message{
+			Type: protocol.Msg_Tribute_Return,
+			Payload: protocol.Tribute_Return_Payload{
+				To_Seat: from,
+			},
+		})
+	}
+}
+
+func (r *Room) schedule_begin_play(seat int, delay time.Duration) {
+	go func() {
+		time.Sleep(delay)
+		r.begin_play <- seat
+	}()
+}
+
+func (r *Room) handle_begin_play(seat int) {
+	if r.game == nil || r.game.Phase != game.Phase_Tribute {
+		return
+	}
+	r.game.Phase = game.Phase_Play
+	r.game.Current_Turn = seat
+	r.send_turn_notification()
+	r.trigger_bot_turn_if_needed()
 }
 
 func (r *Room) trigger_bot_tributes() {

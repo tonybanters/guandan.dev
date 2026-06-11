@@ -160,12 +160,14 @@ export default function App() {
             set_leading_seat(null)
             set_tribute_target(null)
             set_return_target(null)
+            set_tribute_events([])
         })
 
         const unsub_turn = on('turn', (msg: Message) => {
             const payload = msg.payload as Turn_Payload
             set_current_turn(payload.seat)
             set_can_pass(payload.can_pass)
+            set_tribute_events((prev) => (prev.length ? [] : prev))
 
             if (!payload.can_pass) {
                 set_player_plays({})
@@ -245,10 +247,11 @@ export default function App() {
             set_hand((prev) => sort_cards([...prev, payload.card], level))
         })
 
+        // tribute events stay on the table for the whole exchange; the server
+        // delays the first turn, and that turn message clears them
         const push_tribute_event = (kind: Tribute_Event['kind'], from_seat: number, to_seat: number, card: Card | null) => {
             const id = ++tribute_event_id.current
             set_tribute_events((prev) => [...prev, { id, kind, from_seat, to_seat, card }])
-            setTimeout(() => set_tribute_events((prev) => prev.filter((e) => e.id !== id)), 7000)
         }
 
         const unsub_tribute_paid = on('tribute_paid', (msg: Message) => {

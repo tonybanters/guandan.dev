@@ -468,11 +468,25 @@ function Tribute_Banner({ event, level, my_seat, players_map, is_mobile }: Tribu
   const seat_name = (seat: number) =>
     seat === my_seat ? 'You' : players_map[seat] || `P${seat + 1}`
 
-  const text = event.kind === 'kang_gong'
-    ? 'Tribute refused — both red jokers (kang gong)'
-    : event.kind === 'pay'
-      ? `${seat_name(event.from_seat)} paid tribute to ${seat_name(event.to_seat)}`
-      : `${seat_name(event.from_seat)} returned to ${seat_name(event.to_seat)}`
+  const is_return = event.kind === 'return'
+  const accent = is_return ? '#64b5f6' : '#ffc107'
+
+  const name_chip = (seat: number) => (
+    <span style={{
+      padding: is_mobile ? '2px 8px' : '3px 10px',
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      borderRadius: 6,
+      fontSize: is_mobile ? 12 : 14,
+      fontWeight: 'bold',
+      color: '#fff',
+      maxWidth: is_mobile ? 80 : 120,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    }}>
+      {seat_name(seat)}
+    </span>
+  )
 
   return (
     <motion.div
@@ -483,27 +497,45 @@ function Tribute_Banner({ event, level, my_seat, players_map, is_mobile }: Tribu
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        backgroundColor: event.kind === 'kang_gong' ? 'rgba(220, 53, 69, 0.85)' : 'rgba(0, 0, 0, 0.78)',
-        border: '1px solid rgba(255, 193, 7, 0.5)',
-        color: '#fff',
+        gap: is_mobile ? 6 : 10,
+        backgroundColor: event.kind === 'kang_gong' ? 'rgba(220, 53, 69, 0.85)' : 'rgba(0, 0, 0, 0.72)',
+        border: `1px solid ${event.kind === 'kang_gong' ? '#dc3545' : accent}`,
         padding: is_mobile ? '4px 10px' : '6px 14px',
-        borderRadius: 8,
-        fontSize: is_mobile ? 12 : 14,
-        fontWeight: 'bold',
+        borderRadius: 10,
         boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
       }}
     >
-      <span>{text}</span>
-      {event.card && (
-        <Card
-          card={event.card}
-          level={level}
-          selected={false}
-          on_click={() => {}}
-          size={is_mobile ? 'tiny' : 'small'}
-          context="table"
-        />
+      {event.kind === 'kang_gong' ? (
+        <span style={{ color: '#fff', fontSize: is_mobile ? 12 : 14, fontWeight: 'bold' }}>
+          Tribute refused — both red jokers (kang gong)
+        </span>
+      ) : (
+        <>
+          <span style={{
+            color: accent,
+            fontSize: is_mobile ? 9 : 10,
+            fontWeight: 'bold',
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+          }}>
+            {is_return ? 'return' : 'tribute'}
+          </span>
+          {name_chip(event.from_seat)}
+          {event.card && (
+            <Card
+              card={event.card}
+              level={level}
+              selected={false}
+              on_click={() => {}}
+              size={is_mobile ? 'tiny' : 'small'}
+              context="table"
+            />
+          )}
+          <span style={{ color: accent, fontSize: is_mobile ? 18 : 24, lineHeight: 1, fontWeight: 'bold' }}>
+            →
+          </span>
+          {name_chip(event.to_seat)}
+        </>
       )}
     </motion.div>
   )
