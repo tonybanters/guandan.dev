@@ -412,7 +412,7 @@ function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mob
       return {
         ...base,
         left: is_mobile ? 2 : 8,
-        top: '34%',
+        top: '40%',
         transform: 'translateY(-50%)',
       }
     }
@@ -420,7 +420,7 @@ function Player_Badge({ seat, name, count, is_turn, is_leading, position, is_mob
     return {
       ...base,
       right: is_mobile ? 2 : 8,
-      top: '56%',
+      top: '40%',
       transform: 'translateY(-50%)',
     }
   }
@@ -531,8 +531,8 @@ function Played_Cards({ play, is_leading, level, position, is_mobile }: Played_C
       alignItems: 'center',
     }
 
-    // All plays share the same centered x so equal-length combos line up;
-    // each player gets their own row, with left/right badges on those rows
+    // teammate (top) and my plays share the same centered x so equal-length
+    // combos line up; opponents' plays sit beside their badges
     if (position === 'top') {
       return {
         ...base,
@@ -544,17 +544,17 @@ function Played_Cards({ play, is_leading, level, position, is_mobile }: Played_C
     if (position === 'left') {
       return {
         ...base,
-        left: '50%',
-        top: '34%',
-        transform: 'translate(-50%, -50%)',
+        left: is_mobile ? 52 : 110,
+        top: '40%',
+        transform: 'translateY(-50%)',
       }
     }
     // right
     return {
       ...base,
-      left: '50%',
-      top: '56%',
-      transform: 'translate(-50%, -50%)',
+      right: is_mobile ? 52 : 110,
+      top: '40%',
+      transform: 'translateY(-50%)',
     }
   }
 
