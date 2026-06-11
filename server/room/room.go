@@ -972,17 +972,49 @@ func (r *Room) setup_tribute() {
 		return
 	}
 
-	// the tribute is forced (largest non-wild card), so pay it automatically
-	// for everyone; only the returns need a decision
-	log.Printf("[DEBUG] setup_tribute: auto-paying tributes")
+	// the tribute rank is forced (largest non-wild), so pay automatically
+	// unless that rank spans multiple suits, where the payer picks the suit
 	for _, t := range r.game.Tributes {
-		r.auto_pay_tribute(t.From_Seat, t.To_Seat)
+		if r.payer_has_tribute_choice(t.From_Seat) {
+			log.Printf("[DEBUG] setup_tribute: seat %d has a suit choice, prompting", t.From_Seat)
+			if r.clients[t.From_Seat] != nil {
+				r.clients[t.From_Seat].send_message(&protocol.Message{
+					Type: protocol.Msg_Tribute,
+					Payload: protocol.Tribute_Payload{
+						From_Seat: t.From_Seat,
+						To_Seat:   t.To_Seat,
+					},
+				})
+			}
+		} else {
+			r.auto_pay_tribute(t.From_Seat, t.To_Seat)
+		}
 	}
 
 	log.Printf("[DEBUG] setup_tribute: entering tribute phase")
 	r.game.Phase = game.Phase_Tribute
 
+	r.trigger_bot_tributes()
 	r.trigger_bot_returns()
+}
+
+/*
+ * payer_has_tribute_choice reports whether the forced tribute rank leaves a
+ * real decision: multiple distinct suits at the largest non-wild rank.
+ * duplicate copies of the same suit are not a choice.
+ */
+func (r *Room) payer_has_tribute_choice(seat int) bool {
+	largest_rank, ok := find_largest_tribute_rank(r.game.Hands[seat], r.game.Level)
+	if !ok {
+		return false
+	}
+	suits := make(map[game.Suit]bool)
+	for _, c := range r.game.Hands[seat] {
+		if c.Rank == largest_rank && !game.Is_Wild(c, r.game.Level) {
+			suits[c.Suit] = true
+		}
+	}
+	return len(suits) > 1
 }
 
 /*
