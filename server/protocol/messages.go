@@ -5,36 +5,41 @@ import "guandanbtw/game"
 type Msg_Type string
 
 const (
-	Msg_Join_Room     Msg_Type = "join_room"
-	Msg_Create_Room   Msg_Type = "create_room"
-	Msg_Room_State    Msg_Type = "room_state"
-	Msg_Game_Start    Msg_Type = "game_start"
-	Msg_Deal_Cards    Msg_Type = "deal_cards"
-	Msg_Play_Cards    Msg_Type = "play_cards"
-	Msg_Pass          Msg_Type = "pass"
-	Msg_Turn          Msg_Type = "turn"
-	Msg_Play_Made     Msg_Type = "play_made"
-	Msg_Hand_End      Msg_Type = "hand_end"
+	Msg_Join_Room           Msg_Type = "join_room"
+	Msg_Create_Room         Msg_Type = "create_room"
+	Msg_Room_State          Msg_Type = "room_state"
+	Msg_Game_Start          Msg_Type = "game_start"
+	Msg_Deal_Cards          Msg_Type = "deal_cards"
+	Msg_Play_Cards          Msg_Type = "play_cards"
+	Msg_Pass                Msg_Type = "pass"
+	Msg_Turn                Msg_Type = "turn"
+	Msg_Play_Made           Msg_Type = "play_made"
+	Msg_Hand_End            Msg_Type = "hand_end"
 	Msg_Tribute             Msg_Type = "tribute"
 	Msg_Tribute_Give        Msg_Type = "tribute_give"
 	Msg_Tribute_Recv        Msg_Type = "tribute_recv"
-	Msg_Tribute_Return      Msg_Type = "tribute_return"      // Server -> client: Winner must give back a card ≤10
-	Msg_Tribute_Return_Give Msg_Type = "tribute_return_give" // Client -> server: Here's the card I'm returning
-	Msg_Tribute_Give_Ok     Msg_Type = "tribute_give_ok"     // Server -> client: Tribute accepted
-	Msg_Tribute_Return_Ok   Msg_Type = "tribute_return_ok"   // Server -> client: Return accepted
-	Msg_Kang_Gong           Msg_Type = "kang_gong"           // Server -> clients: Tribute refused (payers held both red jokers)
-	Msg_Game_End      Msg_Type = "game_end"
-	Msg_Error         Msg_Type = "error"
-	Msg_Player_Joined Msg_Type = "player_joined"
-	Msg_Player_Left   Msg_Type = "player_left"
-	Msg_Fill_Bots     Msg_Type = "fill_bots"
-	Msg_Reconnect     Msg_Type = "reconnect"         // Client -> server: Attempt to reconnect
-	Msg_Reconnect_Success Msg_Type = "reconnect_success" // Server -> client: Reconnection successful with game state
-	Msg_Player_Disconnected Msg_Type = "player_disconnected" // Server -> clients: Player temporarily disconnected
-	Msg_Player_Reconnected  Msg_Type = "player_reconnected"  // Server -> clients: Player reconnected
-	Msg_Start_Game          Msg_Type = "start_game"           // Client -> server: Host starts the game
-	Msg_Pick_Seat           Msg_Type = "pick_seat"            // Client -> server: Player picks a seat
-	Msg_Ready               Msg_Type = "ready"                // Client -> server: Player toggles ready
+	Msg_Tribute_Return      Msg_Type = "tribute_return"
+	Msg_Tribute_Return_Give Msg_Type = "tribute_return_give"
+	Msg_Tribute_Give_Ok     Msg_Type = "tribute_give_ok"
+	Msg_Tribute_Return_Ok   Msg_Type = "tribute_return_ok"
+	Msg_Kang_Gong           Msg_Type = "kang_gong" // no tax if 2 red jokers
+	Msg_Game_End            Msg_Type = "game_end"
+	Msg_Error               Msg_Type = "error"
+	Msg_Player_Joined       Msg_Type = "player_joined"
+	Msg_Player_Left         Msg_Type = "player_left"
+	Msg_Fill_Bots           Msg_Type = "fill_bots"
+	Msg_Reconnect           Msg_Type = "reconnect"
+	Msg_Reconnect_Success   Msg_Type = "reconnect_success"
+	Msg_Player_Disconnected Msg_Type = "player_disconnected"
+	Msg_Player_Reconnected  Msg_Type = "player_reconnected"
+	Msg_Start_Game          Msg_Type = "start_game"
+	Msg_Pick_Seat           Msg_Type = "pick_seat"
+	Msg_Ready               Msg_Type = "ready"
+	Msg_Leave_Room          Msg_Type = "leave_room"
+	Msg_Queue_Join          Msg_Type = "queue_join"
+	Msg_Queue_Leave         Msg_Type = "queue_leave"
+	Msg_Queue_Status        Msg_Type = "queue_status"
+	Msg_Requeued            Msg_Type = "requeued"
 )
 
 type Message struct {
@@ -58,6 +63,16 @@ type Room_State_Payload struct {
 	Your_Id       string        `json:"your_id"`
 	Session_Token string        `json:"session_token,omitempty"`
 	Is_Host       bool          `json:"is_host"`
+	Quick_Match   bool          `json:"quick_match"`
+}
+
+type Queue_Join_Payload struct {
+	Player_Name string `json:"player_name"`
+}
+
+type Queue_Status_Payload struct {
+	Found  int `json:"found"`
+	Needed int `json:"needed"`
 }
 
 type Player_Info struct {
@@ -113,7 +128,7 @@ type Tribute_Recv_Payload struct {
 }
 
 type Tribute_Return_Payload struct {
-	To_Seat int `json:"to_seat"` // The seat you must give a card back to
+	To_Seat int `json:"to_seat"`
 }
 
 type Tribute_Ok_Payload struct {
@@ -121,8 +136,8 @@ type Tribute_Ok_Payload struct {
 }
 
 type Kang_Gong_Payload struct {
-	From_Seats []int `json:"from_seats"` // The seats that would have paid tribute
-	Leader     int   `json:"leader"`     // Seat that leads the new hand (first finisher)
+	From_Seats []int `json:"from_seats"`
+	Leader     int   `json:"leader"`
 }
 
 type Game_End_Payload struct {

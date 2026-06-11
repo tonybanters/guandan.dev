@@ -84,6 +84,11 @@ export type Msg_Type =
   | 'start_game'
   | 'pick_seat'
   | 'ready'
+  | 'leave_room'
+  | 'queue_join'
+  | 'queue_leave'
+  | 'queue_status'
+  | 'requeued'
 
 export interface Message<T = unknown> {
   type: Msg_Type

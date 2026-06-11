@@ -20,9 +20,13 @@ interface Home_Props {
     on_create_room: (name: string) => void
     on_join_room: (room_id: string, name: string) => void
     on_practice: (name: string) => void
+    on_quick_match: (name: string) => void
+    in_queue: boolean
+    queue_found: number
+    on_cancel_queue: () => void
 }
 
-export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_session, on_create_room, on_join_room, on_practice }: Home_Props) {
+export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_session, on_create_room, on_join_room, on_practice, on_quick_match, in_queue, queue_found, on_cancel_queue }: Home_Props) {
     const [name, set_name] = useState(get_saved_name)
     const [join_code, set_join_code] = useState('')
     const [view, set_view] = useState<'menu' | 'friends'>('menu')
@@ -53,6 +57,37 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
     }
 
     const disabled_style: React.CSSProperties = { opacity: 0.5, cursor: 'not-allowed' }
+
+    if (in_queue) {
+        return (
+            <div style={styles.container}>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={styles.card}
+                >
+                    <h1 style={styles.logo}>掼蛋</h1>
+                    <h2 style={styles.title}>Quick Match</h2>
+                    <motion.div
+                        animate={{ opacity: [1, 0.4, 1] }}
+                        transition={{ repeat: Infinity, duration: 1.6 }}
+                        style={{ color: '#7ec8e3', fontSize: 18, fontWeight: 'bold' }}
+                    >
+                        Searching for players… {queue_found}/4
+                    </motion.div>
+                    <p style={styles.hint}>The match starts as soon as 4 players are found</p>
+                    <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={on_cancel_queue}
+                        style={{ ...styles.menu_button, backgroundColor: '#6c757d' }}
+                    >
+                        Cancel
+                    </motion.button>
+                </motion.div>
+            </div>
+        )
+    }
 
     return (
         <div style={styles.container}>
@@ -131,12 +166,18 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                         >
                             Practice vs Bots
                         </motion.button>
-                        <button
-                            disabled
-                            style={{ ...styles.menu_button, backgroundColor: '#3a3a4e', ...disabled_style }}
+                        <motion.button
+                            whileHover={has_name ? { scale: 1.03 } : undefined}
+                            whileTap={has_name ? { scale: 0.97 } : undefined}
+                            onClick={() => { if (has_name) on_quick_match(name.trim()) }}
+                            style={{
+                                ...styles.menu_button,
+                                backgroundColor: '#9c27b0',
+                                ...(has_name ? {} : disabled_style),
+                            }}
                         >
-                            Quick Match <span style={styles.soon_tag}>soon</span>
-                        </button>
+                            Quick Match
+                        </motion.button>
                         {!has_name && <p style={styles.hint}>Enter a name to play</p>}
                     </>
                 )}
@@ -272,15 +313,6 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         gap: 8,
         justifyContent: 'center',
     },
-    soon_tag: {
-        fontSize: 10,
-        backgroundColor: '#555',
-        color: '#bbb',
-        padding: '2px 6px',
-        borderRadius: 4,
-        marginLeft: 6,
-        verticalAlign: 'middle',
-    },
     hint: {
         color: '#666',
         fontSize: 12,
@@ -288,7 +320,6 @@ const desktop_styles: Record<string, React.CSSProperties> = {
     },
 }
 
-// Compact overrides so the home screen fits landscape phones (~390px tall)
 const mobile_styles: Record<string, React.CSSProperties> = {
     card: {
         display: 'flex',

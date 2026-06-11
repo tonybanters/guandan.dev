@@ -36,11 +36,14 @@ type Pick_Seat_Action struct {
 
 type Room struct {
 	id                   string
+	hub                  *Hub
+	is_quick_match       bool
 	host                 *Client
 	clients              [4]*Client
 	game                 *game.Game_State
 	join                 chan *Client
 	leave                chan *Client
+	explicit_leave       chan *Client
 	play                 chan Play_Action
 	pass                 chan *Client
 	tribute              chan Tribute_Action
@@ -51,8 +54,8 @@ type Room struct {
 	ready                chan *Client
 	bot_turn             chan int
 	reconnect            chan Reconnect_Request
-	expire_disconnected  chan string // session_token
-	disconnected_players map[string]*Disconnected_Player // session_token -> player info
+	expire_disconnected  chan string
+	disconnected_players map[string]*Disconnected_Player
 }
 
 func new_room(id string) *Room {
@@ -60,6 +63,7 @@ func new_room(id string) *Room {
 		id:                   id,
 		join:                 make(chan *Client),
 		leave:                make(chan *Client),
+		explicit_leave:       make(chan *Client),
 		play:                 make(chan Play_Action),
 		pass:                 make(chan *Client),
 		tribute:              make(chan Tribute_Action),
@@ -79,7 +83,6 @@ func (r *Room) run() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("[ERROR] room %s panic: %v", r.id, err)
-			// Notify connected clients that the room crashed
 			for _, client := range r.clients {
 				if client != nil && !client.disconnected {
 					client.send_error("room encountered an error")
@@ -94,6 +97,8 @@ func (r *Room) run() {
 			r.handle_join(client)
 		case client := <-r.leave:
 			r.handle_leave(client)
+		case client := <-r.explicit_leave:
+			r.handle_explicit_leave(client)
 		case req := <-r.reconnect:
 			r.handle_reconnect(req)
 		case token := <-r.expire_disconnected:
@@ -121,7 +126,6 @@ func (r *Room) run() {
 }
 
 func (r *Room) handle_join(client *Client) {
-	// Check if this player name matches a disconnected player — rejoin them
 	for token, dp := range r.disconnected_players {
 		if dp.name == client.name {
 			log.Printf("[DEBUG] handle_join: player %s matches disconnected player at seat %d, rejoining", client.name, dp.seat)
@@ -165,7 +169,6 @@ func (r *Room) handle_join(client *Client) {
 }
 
 func (r *Room) handle_leave(client *Client) {
-	// Skip if already disconnected (prevents double-processing)
 	if client.disconnected {
 		return
 	}
@@ -181,23 +184,17 @@ func (r *Room) handle_leave(client *Client) {
 		return
 	}
 
-	// If game is active, mark as disconnected instead of removing
 	if r.game != nil && !client.is_bot {
 		log.Printf("[DEBUG] handle_leave: player %s (seat %d) disconnected during game, saving session", client.name, seat)
 
-		// Save disconnected player info for reconnection
 		r.disconnected_players[client.session_token] = &Disconnected_Player{
 			session_token: client.session_token,
 			seat:          seat,
 			name:          client.name,
 		}
 
-		// Mark client as disconnected but keep in seat
-		// Don't touch conn or send - read_pump's defer already closed the conn,
-		// and write_pump will exit on its next ping attempt
 		client.disconnected = true
 
-		// Notify other players
 		r.broadcast(&protocol.Message{
 			Type: protocol.Msg_Player_Disconnected,
 			Payload: protocol.Player_Status_Payload{
@@ -207,26 +204,27 @@ func (r *Room) handle_leave(client *Client) {
 			},
 		})
 
-		// If it was this player's turn, advance to the next player
 		if r.game.Current_Turn == seat {
 			log.Printf("[DEBUG] handle_leave: it was seat %d's turn, advancing", seat)
 			r.advance_turn()
 		}
 
-		// Set a timeout to fully remove the player if they don't reconnect
 		go func(token string, s int) {
-			time.Sleep(60 * time.Second) // 60 second reconnect window
+			time.Sleep(60 * time.Second)
 			r.expire_disconnected <- token
 		}(client.session_token, seat)
 
 		return
 	}
 
-	// No game active - fully remove the player
 	r.clients[seat] = nil
 	client.room = nil
 
-	// Transfer host if the leaving player was host
+	if r.is_quick_match {
+		r.requeue_survivors()
+		return
+	}
+
 	if r.host == client {
 		r.host = nil
 		for _, c := range r.clients {
@@ -251,14 +249,12 @@ func (r *Room) handle_leave(client *Client) {
 func (r *Room) handle_reconnect(req Reconnect_Request) {
 	log.Printf("[DEBUG] handle_reconnect: session_token=%s", req.session_token)
 
-	// Find the disconnected player
 	dp, exists := r.disconnected_players[req.session_token]
 	if !exists {
 		req.new_client.send_error("session not found or expired")
 		return
 	}
 
-	// Get the old client from the seat
 	old_client := r.clients[dp.seat]
 	if old_client == nil {
 		req.new_client.send_error("seat no longer available")
@@ -266,25 +262,19 @@ func (r *Room) handle_reconnect(req Reconnect_Request) {
 		return
 	}
 
-	// Transfer identity from old client to the new connection
-	// (new client already has its own goroutines running)
 	req.new_client.id = old_client.id
 	req.new_client.name = dp.name
 	req.new_client.session_token = old_client.session_token
 	req.new_client.room = r
 
-	// Replace old client with new one in the seat
 	r.clients[dp.seat] = req.new_client
 
-	// Remove from disconnected list
 	delete(r.disconnected_players, req.session_token)
 
 	log.Printf("[DEBUG] handle_reconnect: player %s reconnected to seat %d", dp.name, dp.seat)
 
-	// Send full game state to reconnected player
 	r.send_reconnect_state(req.new_client, dp.seat)
 
-	// Notify other players
 	r.broadcast(&protocol.Message{
 		Type: protocol.Msg_Player_Reconnected,
 		Payload: protocol.Player_Status_Payload{
@@ -298,18 +288,16 @@ func (r *Room) handle_reconnect(req Reconnect_Request) {
 func (r *Room) handle_expire_disconnected(token string) {
 	dp, exists := r.disconnected_players[token]
 	if !exists {
-		return // Already reconnected
+		return
 	}
 
 	log.Printf("[DEBUG] handle_expire_disconnected: player at seat %d timed out", dp.seat)
 
-	// Fully remove the player
 	if r.clients[dp.seat] != nil {
 		r.clients[dp.seat] = nil
 	}
 	delete(r.disconnected_players, token)
 
-	// Notify other players
 	r.broadcast(&protocol.Message{
 		Type: protocol.Msg_Player_Left,
 		Payload: protocol.Player_Info{
@@ -318,27 +306,68 @@ func (r *Room) handle_expire_disconnected(token string) {
 		},
 	})
 
-	// If it was the expired player's turn, advance to the next player
 	if r.game != nil && r.game.Current_Turn == dp.seat {
 		log.Printf("[DEBUG] handle_expire_disconnected: it was seat %d's turn, advancing", dp.seat)
 		r.advance_turn()
 	}
+
+	if r.is_quick_match {
+		r.requeue_survivors()
+	}
+}
+
+func (r *Room) handle_explicit_leave(client *Client) {
+	if !r.is_quick_match {
+		r.handle_leave(client)
+		return
+	}
+
+	seat := r.get_seat(client)
+	if seat == -1 {
+		return
+	}
+	r.clients[seat] = nil
+	client.room = nil
+	delete(r.disconnected_players, client.session_token)
+	r.requeue_survivors()
+}
+
+func (r *Room) requeue_survivors() {
+	survivors := make([]*Client, 0, 3)
+	for i, c := range r.clients {
+		if c != nil && !c.disconnected && !c.is_bot {
+			c.room = nil
+			c.ready = false
+			c.send_message(&protocol.Message{
+				Type:    protocol.Msg_Requeued,
+				Payload: struct{}{},
+			})
+			survivors = append(survivors, c)
+		}
+		r.clients[i] = nil
+	}
+	r.game = nil
+	r.host = nil
+
+	log.Printf("[DEBUG] requeue_survivors: room %s disbanded, requeueing %d players", r.id, len(survivors))
+	if len(survivors) > 0 {
+		r.hub.requeue <- survivors
+	}
+	r.hub.delete_room(r.id)
 }
 
 func (r *Room) send_reconnect_state(client *Client, seat int) {
 	if r.game == nil {
-		// No active game, just send room state
+
 		r.broadcast_room_state()
 		return
 	}
 
-	// Build card counts
 	card_counts := [4]int{}
 	for i := 0; i < 4; i++ {
 		card_counts[i] = len(r.game.Hands[i])
 	}
 
-	// Build players list
 	players := make([]protocol.Player_Info, 0)
 	for i, c := range r.clients {
 		if c != nil {
@@ -351,7 +380,6 @@ func (r *Room) send_reconnect_state(client *Client, seat int) {
 		}
 	}
 
-	// Get current table cards and combo type
 	var table_cards []game.Card
 	combo_type := ""
 	if r.game.Current_Lead.Type != game.Comb_Invalid {
@@ -359,7 +387,6 @@ func (r *Room) send_reconnect_state(client *Client, seat int) {
 		combo_type = combo_type_name(r.game.Current_Lead.Type)
 	}
 
-	// Send reconnect success with full game state
 	client.send_message(&protocol.Message{
 		Type: protocol.Msg_Reconnect_Success,
 		Payload: protocol.Reconnect_Success_Payload{
@@ -471,10 +498,6 @@ func (r *Room) handle_pass(client *Client) {
 		},
 	})
 
-	// Calculate how many passes needed: all active (unfinished) players,
-	// minus the lead player only if they're still active. If the lead just
-	// finished by playing their last card, every remaining player still needs
-	// a chance to respond before the trick resets.
 	passes_needed := 4 - len(r.game.Finish_Order)
 	if !r.is_finished(r.game.Lead_Player) {
 		passes_needed--
@@ -484,7 +507,6 @@ func (r *Room) handle_pass(client *Client) {
 		log.Printf("[DEBUG] handle_pass: %d passes (needed %d), resetting lead. Lead_Player=%d", r.game.Pass_Count, passes_needed, r.game.Lead_Player)
 		r.game.Current_Lead = game.Combination{Type: game.Comb_Invalid}
 
-		// After everyone passes, the lead player leads again
 		lead_player := r.game.Lead_Player
 		var next_leader int
 
@@ -492,13 +514,11 @@ func (r *Room) handle_pass(client *Client) {
 			log.Printf("[DEBUG] handle_pass: lead player %d is unfinished, they lead again", lead_player)
 			next_leader = lead_player
 		} else {
-			// If lead player is finished or absent, their teammate leads
 			teammate := (lead_player + 2) % 4
 			if !r.is_finished(teammate) && r.clients[teammate] != nil && !r.clients[teammate].disconnected {
 				log.Printf("[DEBUG] handle_pass: lead player finished/absent, teammate %d leads", teammate)
 				next_leader = teammate
 			} else {
-				// Otherwise, find next unfinished and present player in counterclockwise order
 				log.Printf("[DEBUG] handle_pass: lead player and teammate finished/absent, finding next available")
 				for i := 1; i <= 4; i++ {
 					candidate := (lead_player - i + 4) % 4
@@ -574,7 +594,6 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 		})
 	}
 
-	// Confirm to the giver that the tribute was accepted
 	action.client.send_message(&protocol.Message{
 		Type:    protocol.Msg_Tribute_Give_Ok,
 		Payload: protocol.Tribute_Ok_Payload{Card_Id: action.card_id},
@@ -583,7 +602,6 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 	r.game.Mark_Tribute_Done_With_Value(seat, card_value)
 	log.Printf("[DEBUG] handle_tribute: marked done with value %d, All_Tributes_Done=%v", card_value, r.game.All_Tributes_Done())
 
-	// Notify the winner they need to give a card back
 	winner_seat := tribute_info.To_Seat
 	log.Printf("[DEBUG] handle_tribute: notifying seat %d to return a card to seat %d", winner_seat, seat)
 	if r.clients[winner_seat] != nil {
@@ -595,10 +613,7 @@ func (r *Room) handle_tribute(action Tribute_Action) {
 		})
 	}
 
-	// Trigger next bot tribute if there are more pending
 	r.trigger_bot_tributes()
-
-	// Trigger bot return if winner is a bot
 	r.trigger_bot_returns()
 }
 
@@ -645,7 +660,6 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 		return
 	}
 
-	// Card must be ≤10 (not face card, not wild)
 	if card.Rank > game.Rank_Ten || game.Is_Wild(*card, r.game.Level) {
 		log.Printf("[DEBUG] handle_tribute_return: card rank %d is too high or wild", card.Rank)
 		action.client.send_error("return card must be 10 or lower")
@@ -657,7 +671,6 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 	r.game.Remove_Cards(seat, []int{action.card_id})
 	r.game.Hands[loser_seat] = append(r.game.Hands[loser_seat], *card)
 
-	// Notify the loser they received a card back
 	if r.clients[loser_seat] != nil {
 		r.clients[loser_seat].send_message(&protocol.Message{
 			Type: protocol.Msg_Tribute_Recv,
@@ -667,7 +680,6 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 		})
 	}
 
-	// Confirm to the returner that the return was accepted
 	action.client.send_message(&protocol.Message{
 		Type:    protocol.Msg_Tribute_Return_Ok,
 		Payload: protocol.Tribute_Ok_Payload{Card_Id: action.card_id},
@@ -678,7 +690,6 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 
 	if r.game.All_Returns_Done() {
 		if r.game.All_Tributes_Done() {
-			// All tributes and returns complete, start play
 			first_player := r.game.Determine_First_Player()
 			log.Printf("[DEBUG] handle_tribute_return: all done, first player is seat %d", first_player)
 			r.game.Phase = game.Phase_Play
@@ -686,11 +697,9 @@ func (r *Room) handle_tribute_return(action Tribute_Action) {
 			r.send_turn_notification()
 			r.trigger_bot_turn_if_needed()
 		} else {
-			// More tributes to process
 			r.trigger_bot_tributes()
 		}
 	} else {
-		// More returns to process
 		r.trigger_bot_returns()
 	}
 }
@@ -709,14 +718,12 @@ func (r *Room) trigger_bot_returns() {
 
 		log.Printf("[DEBUG] trigger_bot_returns: bot at seat %d needs to return a card", winner_seat)
 
-		// Find a card ≤10 to return (pick the lowest)
 		hand := r.game.Hands[winner_seat]
 		var best_card *game.Card
 		best_value := 999
 
 		for i := range hand {
 			card := &hand[i]
-			// Must be ≤10 and not wild
 			if card.Rank > game.Rank_Ten || game.Is_Wild(*card, r.game.Level) {
 				continue
 			}
@@ -742,12 +749,16 @@ func (r *Room) trigger_bot_returns() {
 			}
 		}(winner_seat, best_card.Id)
 
-		return // Only one at a time
+		return
 	}
 }
 
 func (r *Room) start_game() {
 	r.game = game.New_Game_State()
+
+	if r.is_quick_match {
+		r.game.Level = game.Random_Level()
+	}
 
 	deck := game.New_Deck()
 	deck.Shuffle()
@@ -805,7 +816,6 @@ func (r *Room) check_hand_end() bool {
 		winning_team := first_team
 		r.end_hand(winning_team, r.calculate_level_advance())
 		return true
-		_ = third_team
 	}
 
 	log.Printf("[DEBUG] check_hand_end: returning false (2 finished, different teams)")
@@ -820,7 +830,6 @@ func (r *Room) calculate_level_advance() int {
 	first := r.game.Finish_Order[0]
 	first_team := first % 2
 
-	// Find where the teammate (partner) finished
 	partner_pos := -1
 	for i, seat := range r.game.Finish_Order {
 		if seat%2 == first_team && i != 0 {
@@ -829,16 +838,12 @@ func (r *Room) calculate_level_advance() int {
 		}
 	}
 
-	// If partner hasn't finished yet, they're 4th (position 3)
 	if partner_pos == -1 {
 		partner_pos = 3
 	}
 
 	log.Printf("[DEBUG] calculate_level_advance: first=%d, first_team=%d, partner_pos=%d", first, first_team, partner_pos)
 
-	// 1-2 win (partner at position 1): +3
-	// 1-3 win (partner at position 2): +2
-	// 1-4 win (partner at position 3): +1
 	switch partner_pos {
 	case 1:
 		return 3
@@ -851,6 +856,26 @@ func (r *Room) calculate_level_advance() int {
 
 func (r *Room) end_hand(winning_team int, level_advance int) {
 	log.Printf("[DEBUG] end_hand: winning_team=%d, level_advance=%d", winning_team, level_advance)
+
+	if r.is_quick_match {
+		r.broadcast(&protocol.Message{
+			Type: protocol.Msg_Hand_End,
+			Payload: protocol.Hand_End_Payload{
+				Finish_Order:  seats_to_ids(r.game.Finish_Order, r.clients),
+				Winning_Team:  winning_team,
+				Level_Advance: 0,
+				New_Levels:    r.game.Team_Levels,
+			},
+		})
+		r.game = nil
+		for _, c := range r.clients {
+			if c != nil {
+				c.ready = false
+			}
+		}
+		r.broadcast_room_state()
+		return
+	}
 
 	old_level := r.game.Team_Levels[winning_team]
 	new_level := old_level + level_advance
@@ -892,13 +917,12 @@ func (r *Room) setup_tribute() {
 
 	log.Printf("[DEBUG] setup_tribute: Tributes=%v, len=%d", r.game.Tributes, len(r.game.Tributes))
 
-	// Deal new cards FIRST - players need cards to tribute from
 	r.deal_new_cards()
 
 	// Kang gong: if the paying side holds both red jokers, skip tribute.
 	// Capture the original payers before the check clears Tributes so we can
 	// tell clients who would have paid.
-	// TODO(future): refactor the tribute phase UI to be more public —
+	// TODO(future): refactor the tribute phase UI to be more public.
 	// currently only the paying/receiving seats see what's happening. The
 	// whole table should see tribute cards, returns, and kang gong events.
 	pre_kang_gong_payers := make([]int, 0, len(r.game.Tributes))
@@ -917,7 +941,6 @@ func (r *Room) setup_tribute() {
 	}
 
 	if len(r.game.Tributes) == 0 {
-		// No tributes (e.g., tribute payer had both red jokers) - first finisher goes first
 		log.Printf("[DEBUG] setup_tribute: no tributes, first finisher (seat %d) starts", r.game.Tribute_Leader)
 		r.game.Phase = game.Phase_Play
 		r.game.Current_Turn = r.game.Tribute_Leader
@@ -942,12 +965,10 @@ func (r *Room) setup_tribute() {
 	log.Printf("[DEBUG] setup_tribute: entering tribute phase")
 	r.game.Phase = game.Phase_Tribute
 
-	// Trigger bot tributes
 	r.trigger_bot_tributes()
 }
 
 func (r *Room) trigger_bot_tributes() {
-	// Only trigger ONE bot tribute at a time - the next will be triggered after this one completes
 	for _, t := range r.game.Tributes {
 		if t.Done {
 			continue
@@ -960,7 +981,6 @@ func (r *Room) trigger_bot_tributes() {
 
 		log.Printf("[DEBUG] trigger_bot_tributes: bot at seat %d needs to tribute", t.From_Seat)
 
-		// Find a non-wild card to tribute (pick the highest value card)
 		hand := r.game.Hands[t.From_Seat]
 		var best_card *game.Card
 		best_value := 0
@@ -984,7 +1004,6 @@ func (r *Room) trigger_bot_tributes() {
 
 		log.Printf("[DEBUG] trigger_bot_tributes: bot tributing card %v", best_card)
 
-		// Perform the tribute - only one at a time
 		go func(seat int, card_id int) {
 			time.Sleep(500 * time.Millisecond)
 			r.tribute <- Tribute_Action{
@@ -993,7 +1012,6 @@ func (r *Room) trigger_bot_tributes() {
 			}
 		}(t.From_Seat, best_card.Id)
 
-		// Return after scheduling one tribute - the next will be triggered after this completes
 		return
 	}
 }
@@ -1036,7 +1054,7 @@ func (r *Room) start_new_hand() {
 
 func (r *Room) advance_turn() {
 	log.Printf("[DEBUG] advance_turn: Current_Turn=%d, Finish_Order=%v", r.game.Current_Turn, r.game.Finish_Order)
-	// Counterclockwise: 0 → 3 → 2 → 1 → 0
+	// counterclockwise: 0 → 3 → 2 → 1 → 0
 	for i := 1; i <= 4; i++ {
 		next := (r.game.Current_Turn - i + 4) % 4
 		finished := r.is_finished(next)
@@ -1113,6 +1131,7 @@ func (r *Room) broadcast_room_state() {
 					Your_Id:       client.id,
 					Session_Token: client.session_token,
 					Is_Host:       r.host == client,
+					Quick_Match:   r.is_quick_match,
 				},
 			})
 		}
@@ -1186,7 +1205,6 @@ func (r *Room) handle_pick_seat(action Pick_Seat_Action) {
 		return
 	}
 
-	// Find current seat and move
 	for i := range 4 {
 		if r.clients[i] == action.client {
 			r.clients[i] = nil
@@ -1194,7 +1212,7 @@ func (r *Room) handle_pick_seat(action Pick_Seat_Action) {
 		}
 	}
 	r.clients[action.seat] = action.client
-	action.client.ready = false // Reset ready when changing seats
+	action.client.ready = false
 
 	r.broadcast_room_state()
 }
@@ -1206,6 +1224,15 @@ func (r *Room) handle_ready(client *Client) {
 
 	client.ready = !client.ready
 	r.broadcast_room_state()
+
+	if r.is_quick_match && r.is_full() {
+		for _, c := range r.clients {
+			if c == nil || !c.ready {
+				return
+			}
+		}
+		r.start_game()
+	}
 }
 
 func (r *Room) handle_start_game(client *Client) {
@@ -1220,7 +1247,6 @@ func (r *Room) handle_start_game(client *Client) {
 		client.send_error("need 4 players to start")
 		return
 	}
-	// Check all human players are ready
 	for _, c := range r.clients {
 		if c != nil && !c.is_bot && !c.ready && c != r.host {
 			client.send_error("not all players are ready")
@@ -1270,7 +1296,6 @@ func (r *Room) handle_bot_turn(seat int) {
 		return
 	}
 
-	// No current lead - bot is leading
 	if r.game.Current_Lead.Type == game.Comb_Invalid {
 		play := game.Bot_Choose_Lead(hand, r.game.Level)
 		if play == nil {
@@ -1285,20 +1310,17 @@ func (r *Room) handle_bot_turn(seat int) {
 		return
 	}
 
-	// There is a current lead - bot must respond
 	lead_team := r.game.Lead_Player % 2
 	bot_team := seat % 2
 	is_teammate_leading := lead_team == bot_team
 	log.Printf("[DEBUG] handle_bot_turn: responding, lead_team=%d, bot_team=%d, teammate=%v", lead_team, bot_team, is_teammate_leading)
 
-	// If teammate is leading, usually pass
 	if is_teammate_leading {
 		log.Printf("[DEBUG] handle_bot_turn: teammate is leading, passing")
 		r.handle_pass(client)
 		return
 	}
 
-	// Try to find a response
 	play := game.Bot_Choose_Response(hand, r.game.Current_Lead, r.game.Level, is_teammate_leading)
 	if play != nil {
 		log.Printf("[DEBUG] handle_bot_turn: responding with %v", play)
@@ -1309,15 +1331,13 @@ func (r *Room) handle_bot_turn(seat int) {
 		return
 	}
 
-	// No direct response - consider bombing
 	analysis := game.Analyze_Hand(hand, r.game.Level)
-	opponent_seat := (seat + 1) % 4 // Check one opponent
+	opponent_seat := (seat + 1) % 4
 	opponent_cards := len(r.game.Hands[opponent_seat])
 
 	if game.Bot_Should_Bomb(analysis, r.game.Current_Lead, r.game.Level, opponent_cards) {
 		bomb := game.Bot_Get_Bomb(analysis, r.game.Level)
 		if bomb != nil {
-			// Verify the bomb actually beats the lead
 			bomb_cards := r.game.Get_Cards_By_Id(seat, bomb)
 			if bomb_cards != nil {
 				combo := game.Detect_Combination(bomb_cards, r.game.Level)

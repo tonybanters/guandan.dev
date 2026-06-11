@@ -32,7 +32,7 @@ type Client struct {
 func new_client(id string, conn *websocket.Conn) *Client {
 	return &Client{
 		id:            id,
-		session_token: generate_id(), // Unique session token for reconnection
+		session_token: generate_id(),
 		conn:          conn,
 		send:          make(chan []byte, 256),
 	}
@@ -139,7 +139,38 @@ func (c *Client) handle_message(hub *Hub, msg *protocol.Message) {
 		c.handle_pick_seat(msg)
 	case protocol.Msg_Ready:
 		c.handle_ready()
+	case protocol.Msg_Leave_Room:
+		c.handle_leave_room()
+	case protocol.Msg_Queue_Join:
+		c.handle_queue_join(hub, msg)
+	case protocol.Msg_Queue_Leave:
+		hub.queue_leave <- c
 	}
+}
+
+func (c *Client) handle_leave_room() {
+	if c.room == nil {
+		return
+	}
+	c.room.explicit_leave <- c
+}
+
+func (c *Client) handle_queue_join(hub *Hub, msg *protocol.Message) {
+	if c.room != nil {
+		c.send_error("already in a room")
+		return
+	}
+
+	payload_bytes, _ := json.Marshal(msg.Payload)
+	var payload protocol.Queue_Join_Payload
+	json.Unmarshal(payload_bytes, &payload)
+
+	if payload.Player_Name == "" {
+		c.send_error("name required")
+		return
+	}
+	c.name = payload.Player_Name
+	hub.queue_join <- c
 }
 
 func (c *Client) handle_fill_bots() {
@@ -208,7 +239,6 @@ func (c *Client) handle_reconnect(hub *Hub, msg *protocol.Message) {
 		return
 	}
 
-	// Try to reconnect using session token
 	room.reconnect <- Reconnect_Request{
 		new_client:    c,
 		session_token: payload.Session_Token,

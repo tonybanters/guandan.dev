@@ -14,3 +14,7 @@ func rand_int(max int) int {
 func Random_Seat() int {
 	return rand_int(4)
 }
+
+func Random_Level() Rank {
+	return Rank(rand_int(13))
+}

@@ -13,9 +13,11 @@ interface Lobby_Props {
     on_leave: () => void
     is_host: boolean
     my_seat: number
+    quick_match: boolean
+    my_team_won: boolean | null
 }
 
-export function Lobby({ room_id, players, on_fill_bots, on_start_game, on_pick_seat, on_ready, on_leave, is_host, my_seat }: Lobby_Props) {
+export function Lobby({ room_id, players, on_fill_bots, on_start_game, on_pick_seat, on_ready, on_leave, is_host, my_seat, quick_match, my_team_won }: Lobby_Props) {
     const [copied, set_copied] = useState(false)
     const is_mobile = use_is_mobile()
     const styles = is_mobile ? { ...desktop_styles, ...mobile_styles } : desktop_styles
@@ -25,13 +27,30 @@ export function Lobby({ room_id, players, on_fill_bots, on_start_game, on_pick_s
     const human_count = players.length
 
     return (
-            <div style={styles.container}>
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    style={styles.card}
-                >
-                    <h2 style={styles.title}>Lobby</h2>
+        <div style={styles.container}>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={styles.card}
+            >
+                <h2 style={styles.title}>{quick_match ? 'Quick Match' : 'Lobby'}</h2>
+
+                {/* Round result - quick match between rounds */}
+                {quick_match && my_team_won !== null && (
+                    <div style={{
+                        padding: '8px 12px',
+                        marginBottom: 12,
+                        borderRadius: 8,
+                        fontWeight: 'bold',
+                        backgroundColor: my_team_won ? 'rgba(40, 167, 69, 0.15)' : 'rgba(220, 53, 69, 0.15)',
+                        border: `1px solid ${my_team_won ? '#28a745' : '#dc3545'}`,
+                        color: my_team_won ? '#7bd88a' : '#e57373',
+                    }}>
+                        {my_team_won ? 'Your team won the round!' : 'Your team lost the round'}
+                    </div>
+                )}
+
+                {!quick_match && (
                     <motion.div
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -46,111 +65,116 @@ export function Lobby({ room_id, players, on_fill_bots, on_start_game, on_pick_s
                         <span style={styles.invite_text}>{`${window.location.host}/room/${room_id}`}</span>
                         <span style={styles.copy_hint}>{copied ? 'Copied!' : 'Click to copy invite link'}</span>
                     </motion.div>
+                )}
 
-                    <div style={styles.players_grid}>
-                        {[0, 1, 2, 3].map((seat) => {
-                            const player = players.find((p) => p.seat === seat)
-                            const team = seat % 2
-                            const is_me = seat === my_seat && me
-                            const team_color = team === 0
-                                ? { bg: '#1a3a5c', border: '#2196f3' }
-                                : { bg: '#4a1a2e', border: '#e91e63' }
+                <div style={styles.players_grid}>
+                    {[0, 1, 2, 3].map((seat) => {
+                        const player = players.find((p) => p.seat === seat)
+                        const team = seat % 2
+                        const is_me = seat === my_seat && me
+                        const team_color = team === 0
+                            ? { bg: '#1a3a5c', border: '#2196f3' }
+                            : { bg: '#4a1a2e', border: '#e91e63' }
 
-                            return (
-                                <motion.div
-                                    key={seat}
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: seat * 0.1 }}
-                                    whileHover={!player ? { scale: 1.05 } : undefined}
-                                    onClick={() => {
-                                        if (!player) on_pick_seat(seat)
-                                    }}
-                                    style={{
-                                        ...styles.player_slot,
-                                        backgroundColor: team_color.bg,
-                                        borderColor: player?.is_ready ? '#4caf50' : team_color.border,
-                                        cursor: !player ? 'pointer' : 'default',
-                                        boxShadow: is_me ? '0 0 0 2px #fff' : 'none',
-                                    }}
-                                >
-                                    <div style={styles.team_label}>Team {team + 1}</div>
-                                    {player ? (
-                                        <>
-                                            <div style={styles.player_name}>
-                                                {player.name}
-                                                {is_me && ' (you)'}
-                                            </div>
-                                            <div style={{
-                                                ...styles.ready_status,
-                                                color: player.is_ready ? '#4caf50' : '#ff9800'
-                                            }}>
-                                                {player.is_ready ? 'Ready' : 'Not Ready'}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div style={styles.empty_slot}>
-                                            Click to sit here
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )
-                        })}
-                    </div>
-
-                    <div style={styles.buttons}>
-                        {me && (
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={on_ready}
+                        return (
+                            <motion.div
+                                key={seat}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: seat * 0.1 }}
+                                whileHover={!player ? { scale: 1.05 } : undefined}
+                                onClick={() => {
+                                    if (!player) on_pick_seat(seat)
+                                }}
                                 style={{
-                                    ...styles.button,
-                                    backgroundColor: me.is_ready ? '#6c757d' : '#4caf50',
+                                    ...styles.player_slot,
+                                    backgroundColor: team_color.bg,
+                                    borderColor: player?.is_ready ? '#4caf50' : team_color.border,
+                                    cursor: !player ? 'pointer' : 'default',
+                                    boxShadow: is_me ? '0 0 0 2px #fff' : 'none',
                                 }}
                             >
-                                {me.is_ready ? 'Unready' : 'Ready'}
-                            </motion.button>
-                        )}
+                                <div style={styles.team_label}>Team {team + 1}</div>
+                                {player ? (
+                                    <>
+                                        <div style={styles.player_name}>
+                                            {player.name}
+                                            {is_me && ' (you)'}
+                                        </div>
+                                        <div style={{
+                                            ...styles.ready_status,
+                                            color: player.is_ready ? '#4caf50' : '#ff9800'
+                                        }}>
+                                            {player.is_ready ? 'Ready' : 'Not Ready'}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={styles.empty_slot}>
+                                        Click to sit here
+                                    </div>
+                                )}
+                            </motion.div>
+                        )
+                    })}
+                </div>
 
-                        {is_host && (
-                            <>
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={on_fill_bots}
-                                    style={{ ...styles.button, backgroundColor: '#ff9800' }}
-                                >
-                                    Fill with Bots
-                                </motion.button>
-                                <motion.button
-                                    whileHover={human_count + (4 - players.length) >= 4 && all_ready ? { scale: 1.05 } : undefined}
-                                    whileTap={human_count + (4 - players.length) >= 4 && all_ready ? { scale: 0.95 } : undefined}
-                                    onClick={on_start_game}
-                                    style={{
-                                        ...styles.button,
-                                        backgroundColor: all_ready && players.length === 4 ? '#28a745' : '#555',
-                                        cursor: all_ready && players.length === 4 ? 'pointer' : 'not-allowed',
-                                    }}
-                                >
-                                    Start Game
-                                </motion.button>
-                            </>
-                        )}
-
+                <div style={styles.buttons}>
+                    {me && (
                         <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={on_leave}
-                            style={{ ...styles.button, backgroundColor: '#dc3545' }}
+                            onClick={on_ready}
+                            style={{
+                                ...styles.button,
+                                backgroundColor: me.is_ready ? '#6c757d' : '#4caf50',
+                            }}
                         >
-                            Leave
+                            {me.is_ready ? 'Unready' : 'Ready'}
                         </motion.button>
-                    </div>
+                    )}
 
-                    <p style={styles.hint}>Share the invite link with friends to join</p>
-                </motion.div>
-            </div>
+                    {is_host && !quick_match && (
+                        <>
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={on_fill_bots}
+                                style={{ ...styles.button, backgroundColor: '#ff9800' }}
+                            >
+                                Fill with Bots
+                            </motion.button>
+                            <motion.button
+                                whileHover={human_count + (4 - players.length) >= 4 && all_ready ? { scale: 1.05 } : undefined}
+                                whileTap={human_count + (4 - players.length) >= 4 && all_ready ? { scale: 0.95 } : undefined}
+                                onClick={on_start_game}
+                                style={{
+                                    ...styles.button,
+                                    backgroundColor: all_ready && players.length === 4 ? '#28a745' : '#555',
+                                    cursor: all_ready && players.length === 4 ? 'pointer' : 'not-allowed',
+                                }}
+                            >
+                                Start Game
+                            </motion.button>
+                        </>
+                    )}
+
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={on_leave}
+                        style={{ ...styles.button, backgroundColor: '#dc3545' }}
+                    >
+                        Leave
+                    </motion.button>
+                </div>
+
+                <p style={styles.hint}>
+                    {quick_match
+                        ? 'Next round starts when all 4 players ready up'
+                        : 'Share the invite link with friends to join'}
+                </p>
+            </motion.div>
+        </div>
     )
 }
 
@@ -256,7 +280,6 @@ const desktop_styles: Record<string, React.CSSProperties> = {
     },
 }
 
-// Compact overrides so the lobby fits landscape phones (~390px tall)
 const mobile_styles: Record<string, React.CSSProperties> = {
     card: {
         backgroundColor: '#16213e',
