@@ -163,9 +163,17 @@ function Spotlights({ anchors }: { anchors: string[][] }) {
                     const el = document.querySelector(sel)
                     if (!el) continue
                     const b = el.getBoundingClientRect()
+                    let visible_right = b.right
+                    if (el instanceof HTMLElement && el.dataset.cardId) {
+                        const next_col = el.parentElement?.nextElementSibling
+                        if (next_col) {
+                            const n = next_col.getBoundingClientRect()
+                            if (n.left > b.left) visible_right = Math.min(visible_right, n.left)
+                        }
+                    }
                     left = Math.min(left, b.left)
                     top = Math.min(top, b.top)
-                    right = Math.max(right, b.right)
+                    right = Math.max(right, visible_right)
                     bottom = Math.max(bottom, b.bottom)
                 }
                 if (left !== Infinity) {
