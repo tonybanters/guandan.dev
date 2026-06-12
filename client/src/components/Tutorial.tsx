@@ -230,6 +230,36 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
     const timers = useRef<number[]>([])
     const entered_step = useRef(-1)
 
+    // on action steps the dialogue docks above the pass/play buttons so it
+    // never covers them on short screens
+    const [dialog_bottom, set_dialog_bottom] = useState<number | null>(null)
+    const current_expect = STEPS[step].expect !== null
+    useEffect(() => {
+        if (!current_expect) {
+            set_dialog_bottom(null)
+            return
+        }
+        const measure = () => {
+            const el = document.querySelector('[data-tut="play"]')
+            if (!el) {
+                set_dialog_bottom(null)
+                return
+            }
+            const r = el.getBoundingClientRect()
+            set_dialog_bottom(prev => {
+                const next = Math.round(window.innerHeight - r.top + 10)
+                return prev === next ? prev : next
+            })
+        }
+        measure()
+        const iv = window.setInterval(measure, 400)
+        window.addEventListener('resize', measure)
+        return () => {
+            window.clearInterval(iv)
+            window.removeEventListener('resize', measure)
+        }
+    }, [step, current_expect])
+
     const schedule = (fn: () => void, delay: number) => {
         timers.current.push(window.setTimeout(fn, delay))
     }
@@ -407,7 +437,9 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
             {/* dialogue box */}
             <div style={{
                 position: 'fixed',
-                top: current.dialog_low ? '58%' : is_mobile ? '30%' : '32%',
+                ...(dialog_bottom !== null
+                    ? { bottom: dialog_bottom }
+                    : { top: current.dialog_low ? '58%' : is_mobile ? '30%' : '32%' }),
                 left: 0,
                 right: 0,
                 display: 'flex',
