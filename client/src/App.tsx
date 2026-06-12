@@ -3,6 +3,7 @@ import { use_websocket } from './hooks/use_websocket'
 import { Home } from './components/Home'
 import { Lobby } from './components/Lobby'
 import { Game } from './components/Game'
+import { Tutorial } from './components/Tutorial'
 import {
     Card,
     Player_Info,
@@ -110,6 +111,7 @@ export default function App() {
     const tribute_event_id = useRef(0)
 
     const [in_queue, set_in_queue] = useState(false)
+    const [show_tutorial, set_show_tutorial] = useState(false)
     const [queue_found, set_queue_found] = useState(1)
     const [is_quick_match, set_is_quick_match] = useState(false)
     const [round_winner, set_round_winner] = useState<number | null>(null)
@@ -481,6 +483,10 @@ export default function App() {
         set_selected_ids(new Set())
     }, [selected_ids, tribute_target, return_target, handle_give_tribute, handle_give_return])
 
+    if (show_tutorial) {
+        return <Tutorial on_exit={() => set_show_tutorial(false)} />
+    }
+
     if (!connected || reconnecting) {
         return (
             <div style={styles.connecting}>
@@ -516,6 +522,7 @@ export default function App() {
                         on_join_room={handle_join_room}
                         on_practice={handle_practice}
                         on_quick_match={handle_quick_match}
+                        on_tutorial={() => set_show_tutorial(true)}
                         in_queue={in_queue}
                         queue_found={queue_found}
                         on_cancel_queue={handle_cancel_queue}

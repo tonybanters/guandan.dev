@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Card as Card_Type, Rank, Tribute_Event, get_rank_symbol, Rank_Two, Rank_Ten, Rank_King, Rank_Ace, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
+import { Cheat_Sheet } from './Cheat_Sheet'
 import { use_is_mobile, use_is_short } from '../hooks/use_is_mobile'
 import { get_rank_value } from '../game/combos'
 
@@ -326,6 +327,7 @@ export function Game({
 
       {/* My area at bottom */}
       <div style={is_mobile ? mobile_styles.my_area : styles.my_area}>
+        <Cheat_Sheet />
         <Hand
           cards={hand}
           level={level}
@@ -928,6 +930,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   my_area: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -987,6 +990,7 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   my_area: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',

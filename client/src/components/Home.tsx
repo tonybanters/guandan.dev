@@ -21,12 +21,13 @@ interface Home_Props {
     on_join_room: (room_id: string, name: string) => void
     on_practice: (name: string) => void
     on_quick_match: (name: string) => void
+    on_tutorial: () => void
     in_queue: boolean
     queue_found: number
     on_cancel_queue: () => void
 }
 
-export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_session, on_create_room, on_join_room, on_practice, on_quick_match, in_queue, queue_found, on_cancel_queue }: Home_Props) {
+export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_session, on_create_room, on_join_room, on_practice, on_quick_match, on_tutorial, in_queue, queue_found, on_cancel_queue }: Home_Props) {
     const [name, set_name] = useState(get_saved_name)
     const [join_code, set_join_code] = useState('')
     const [view, set_view] = useState<'menu' | 'friends'>('menu')
@@ -177,6 +178,14 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                             }}
                         >
                             Quick Match
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={on_tutorial}
+                            style={{ ...styles.menu_button, backgroundColor: '#17a2b8' }}
+                        >
+                            How to Play
                         </motion.button>
                         {!has_name && <p style={styles.hint}>Enter a name to play</p>}
                     </>
