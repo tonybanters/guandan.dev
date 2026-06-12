@@ -61,6 +61,7 @@ export function Cheat_Sheet() {
     return (
         <>
             <button
+                data-tut="cheat"
                 onClick={() => set_open(true)}
                 style={{
                     position: 'absolute',

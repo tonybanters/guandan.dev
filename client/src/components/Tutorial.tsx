@@ -56,7 +56,10 @@ interface Step {
     turn: number
     can_pass: boolean
     dialog_low?: boolean
+    anchors?: string[][]
 }
+
+const cards_anchor = (ids: number[]): string[] => ids.map(id => `[data-card-id="${id}"]`)
 
 const STEPS: Step[] = [
     {
@@ -66,10 +69,12 @@ const STEPS: Step[] = [
     {
         text: 'The badge in the top left shows the level, this hand\'s trump rank. Level cards beat aces. Your gold 2 of HEARTS is wild: it can stand in for almost any card.',
         expect: null, turn: -1, can_pass: false,
+        anchors: [['[data-tut="level"]'], cards_anchor([113])],
     },
     {
         text: 'The table is empty and it\'s your turn, so you may lead anything. Tap your 10 of clubs to select it, then hit Play.',
         expect: { kind: 'play', ids: [101], hint: 'select just the 10 of clubs' }, turn: ME, can_pass: false,
+        anchors: [cards_anchor([101])],
     },
     {
         text: 'West beat your 10 with a queen. To play on someone you must beat their play with the SAME combo type, or pass.',
@@ -78,6 +83,7 @@ const STEPS: Step[] = [
     {
         text: 'Beating the queen would waste your good cards. Sometimes passing is right. Hit Pass.',
         expect: { kind: 'pass' }, turn: ME, can_pass: true,
+        anchors: [['[data-tut="pass"]']],
     },
     {
         text: 'Your partner took the trick with an ace and East passed. When everyone passes, the trick ends and its winner leads the next one.',
@@ -90,6 +96,7 @@ const STEPS: Step[] = [
     {
         text: 'Your pair of 9s cannot beat the 10s. Your partner loses this trick, but hold your strong cards for the right moment. Pass for now.',
         expect: { kind: 'pass' }, turn: ME, can_pass: true,
+        anchors: [['[data-tut="pass"]']],
     },
     {
         text: 'East won the trick with the 10s and leads next. East plays a straight: five consecutive ranks. Only a higher straight or a bomb beats it.',
@@ -98,18 +105,22 @@ const STEPS: Step[] = [
     {
         text: 'You have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s to grab all four, then Play.',
         expect: { kind: 'play', ids: [109, 110, 111, 112], hint: 'double-tap an 8 to select all four' }, turn: ME, can_pass: false,
+        anchors: [cards_anchor([109, 110, 111, 112])],
     },
     {
         text: 'Boom. Nobody can answer a bomb that big, so you lead again. Now play your own straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? Combos button, bottom left.',
         expect: { kind: 'play', ids: [104, 105, 106, 107, 108], hint: 'select the 3, 4, 5, 6 and 7' }, turn: ME, can_pass: false,
+        anchors: [cards_anchor([104, 105, 106, 107, 108]), ['[data-tut="cheat"]']],
     },
     {
         text: 'Everyone passes again. Time to go out: play your pair of 9s, then your last card.',
         expect: { kind: 'play', ids: [102, 103], hint: 'double-tap a 9 to select the pair' }, turn: ME, can_pass: false,
+        anchors: [cards_anchor([102, 103])],
     },
     {
         text: 'One card left: the wild 2 of hearts. Played alone it counts as a level card, stronger than an ace!',
         expect: { kind: 'play', ids: [113], hint: 'select the gold 2 of hearts' }, turn: ME, can_pass: false,
+        anchors: [cards_anchor([113])],
     },
     {
         text: 'You finished 1st! Your team climbs levels based on where your partner lands: 1st + 2nd is 3 levels, 1st + 3rd is 2, 1st + 4th is 1. First team to win at level A takes the game.',
@@ -122,8 +133,84 @@ const STEPS: Step[] = [
     {
         text: 'That\'s the core of Guan Dan. Check ? Combos for tubes, plates, straight flushes and the joker bomb. Good luck!',
         expect: null, turn: -1, can_pass: false,
+        anchors: [['[data-tut="cheat"]']],
     },
 ]
+
+interface Ring {
+    left: number
+    top: number
+    width: number
+    height: number
+}
+
+/*
+ * draws pulsing highlight rings over the dom elements a tutorial step talks
+ * about. each anchor group is a list of selectors whose bounding boxes are
+ * unioned into one ring. positions are re-measured on an interval because
+ * cards animate and the layout shifts as plays land.
+ */
+function Spotlights({ anchors }: { anchors: string[][] }) {
+    const [rings, set_rings] = useState<Ring[]>([])
+    const last = useRef('')
+
+    useEffect(() => {
+        const measure = () => {
+            const out: Ring[] = []
+            for (const group of anchors) {
+                let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+                for (const sel of group) {
+                    const el = document.querySelector(sel)
+                    if (!el) continue
+                    const b = el.getBoundingClientRect()
+                    left = Math.min(left, b.left)
+                    top = Math.min(top, b.top)
+                    right = Math.max(right, b.right)
+                    bottom = Math.max(bottom, b.bottom)
+                }
+                if (left !== Infinity) {
+                    out.push({ left, top, width: right - left, height: bottom - top })
+                }
+            }
+            const key = JSON.stringify(out)
+            if (key !== last.current) {
+                last.current = key
+                set_rings(out)
+            }
+        }
+        measure()
+        const iv = window.setInterval(measure, 250)
+        window.addEventListener('resize', measure)
+        return () => {
+            window.clearInterval(iv)
+            window.removeEventListener('resize', measure)
+        }
+    }, [anchors])
+
+    return (
+        <>
+            {rings.map((r, i) => (
+                <motion.div
+                    key={i}
+                    animate={{ opacity: [1, 0.4, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.4 }}
+                    style={{
+                        position: 'fixed',
+                        left: r.left - 5,
+                        top: r.top - 5,
+                        width: r.width + 10,
+                        height: r.height + 10,
+                        border: '2px solid #ffc107',
+                        borderRadius: 10,
+                        boxShadow: '0 0 14px rgba(255, 193, 7, 0.6)',
+                        pointerEvents: 'none',
+                        zIndex: 240,
+                    }}
+                />
+            ))}
+        </>
+    )
+}
 
 /*
  * drives a fully scripted mock round through the real game ui. all state
@@ -314,6 +401,8 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 tribute_events={tribute_events}
                 on_leave={on_exit}
             />
+
+            {current.anchors && <Spotlights key={step} anchors={current.anchors} />}
 
             {/* dialogue box */}
             <div style={{

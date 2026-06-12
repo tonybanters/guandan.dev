@@ -135,7 +135,7 @@ export function Game({
     <div style={is_mobile ? mobile_styles.container : styles.container}>
       {/* Info bar */}
       <div style={is_mobile ? mobile_styles.info_bar : styles.info_bar}>
-        <div style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
+        <div data-tut="level" style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
           Lvl: {get_rank_symbol(level)}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: is_mobile ? 8 : 12 }}>
@@ -266,6 +266,7 @@ export function Game({
                   color="#dc3545"
                   on_click={on_pass}
                   is_mobile={is_mobile}
+                  tut_id="pass"
                 />
                 <Action_Button
                   label="Play"
@@ -273,6 +274,7 @@ export function Game({
                   color="#28a745"
                   on_click={on_play}
                   is_mobile={is_mobile}
+                  tut_id="play"
                 />
               </>
             )}
@@ -550,11 +552,13 @@ interface Action_Button_Props {
   text_color?: string
   on_click: () => void
   is_mobile: boolean
+  tut_id?: string
 }
 
-function Action_Button({ label, enabled, color, text_color = '#fff', on_click, is_mobile }: Action_Button_Props) {
+function Action_Button({ label, enabled, color, text_color = '#fff', on_click, is_mobile, tut_id }: Action_Button_Props) {
   return (
     <motion.button
+      data-tut={tut_id}
       whileTap={enabled ? { scale: 0.95 } : undefined}
       onClick={on_click}
       disabled={!enabled}
