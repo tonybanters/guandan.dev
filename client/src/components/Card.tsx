@@ -12,6 +12,7 @@ interface Card_Props {
     on_click: () => void
     size?: Card_Size
     context?: Card_Context
+    highlighted?: boolean
 }
 
 export const CARD_CONFIG = {
@@ -59,7 +60,7 @@ export const CARD_CONFIG = {
 
 const CARD_FONT = "'Iosevka Nerd Font', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
-export function Card({ card, level, selected, on_click, size = 'normal', context = 'hand' }: Card_Props) {
+export function Card({ card, level, selected, on_click, size = 'normal', context = 'hand', highlighted }: Card_Props) {
     const is_joker = card.Suit === Suit_Joker
     const is_red = is_joker ? card.Rank === Rank_Red_Joker : is_red_suit(card.Suit)
     const is_wild_card = is_wild(card, level)
@@ -88,6 +89,24 @@ export function Card({ card, level, selected, on_click, size = 'normal', context
                 overflow: 'hidden',
             }}
         >
+            {/* Tutorial highlight - pulses inside the card so overlap stays clean */}
+            {highlighted && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(255, 193, 7, 0.3)',
+                        border: '2px solid #ffc107',
+                        pointerEvents: 'none',
+                        zIndex: 9,
+                        animation: 'tut-pulse 1.4s ease-in-out infinite',
+                    }}
+                />
+            )}
+
             {/* Selection overlay */}
             {selected && (
                 <div

@@ -56,6 +56,7 @@ interface Game_Props {
   on_tribute?: () => void
   tribute_events: Tribute_Event[]
   on_leave: () => void
+  highlight_ids?: Set<number>
 }
 
 export function Game({
@@ -80,6 +81,7 @@ export function Game({
   on_tribute,
   tribute_events,
   on_leave,
+  highlight_ids,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
@@ -339,6 +341,7 @@ export function Game({
           on_select_same_rank={is_tribute_mode ? tribute_select_same_rank : on_select_same_rank}
           on_clear_selection={on_clear_selection}
           is_tribute_mode={is_tribute_mode}
+          highlight_ids={highlight_ids}
         />
 
         {hand.length === 0 && (

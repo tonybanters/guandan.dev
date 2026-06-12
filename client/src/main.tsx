@@ -41,6 +41,10 @@ style.textContent = `
   button {
     -webkit-tap-highlight-color: transparent;
   }
+  @keyframes tut-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
 `
 document.head.appendChild(style)
 

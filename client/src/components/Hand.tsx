@@ -14,6 +14,7 @@ interface Hand_Props {
   on_select_same_rank: (rank: number) => void
   on_clear_selection: () => void
   is_tribute_mode?: 'give' | 'return' | false
+  highlight_ids?: Set<number>
 }
 
 interface Column {
@@ -25,7 +26,7 @@ interface Column {
 // straight flush helper buttons are disabled for now, flip to re-enable
 const SHOW_SUIT_BUTTONS: boolean = false
 
-export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, is_tribute_mode }: Hand_Props) {
+export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_selection, on_select_same_rank, on_clear_selection, is_tribute_mode, highlight_ids }: Hand_Props) {
   const is_mobile = use_is_mobile()
   const last_click = useRef<{ id: number; time: number } | null>(null)
   const [custom_columns, set_custom_columns] = useState<Map<string, number[]>>(new Map())
@@ -402,6 +403,7 @@ export function Hand({ cards, level, selected_ids, on_card_click, on_toggle_sele
                           on_click={() => handle_card_click(card)}
                           size={card_size}
                           context="hand"
+                          highlighted={highlight_ids?.has(card.Id)}
                         />
                       </motion.div>
                     )

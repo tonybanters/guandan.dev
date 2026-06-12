@@ -57,9 +57,8 @@ interface Step {
     can_pass: boolean
     dialog_low?: boolean
     anchors?: string[][]
+    highlight_cards?: number[]
 }
-
-const cards_anchor = (ids: number[]): string[] => ids.map(id => `[data-card-id="${id}"]`)
 
 const STEPS: Step[] = [
     {
@@ -69,12 +68,12 @@ const STEPS: Step[] = [
     {
         text: 'The badge in the top left shows the level, this hand\'s trump rank. Level cards beat aces. Your gold 2 of HEARTS is wild: it can stand in for almost any card.',
         expect: null, turn: -1, can_pass: false,
-        anchors: [['[data-tut="level"]'], cards_anchor([113])],
+        anchors: [['[data-tut="level"]']], highlight_cards: [113],
     },
     {
         text: 'The table is empty and it\'s your turn, so you may lead anything. Tap your 10 of clubs to select it, then hit Play.',
         expect: { kind: 'play', ids: [101], hint: 'select just the 10 of clubs' }, turn: ME, can_pass: false,
-        anchors: [cards_anchor([101])],
+        highlight_cards: [101],
     },
     {
         text: 'West beat your 10 with a queen. To play on someone you must beat their play with the SAME combo type, or pass.',
@@ -105,22 +104,22 @@ const STEPS: Step[] = [
     {
         text: 'You have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s to grab all four, then Play.',
         expect: { kind: 'play', ids: [109, 110, 111, 112], hint: 'double-tap an 8 to select all four' }, turn: ME, can_pass: false,
-        anchors: [cards_anchor([109, 110, 111, 112])],
+        highlight_cards: [109, 110, 111, 112],
     },
     {
         text: 'Boom. Nobody can answer a bomb that big, so you lead again. Now play your own straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? Combos button, bottom left.',
         expect: { kind: 'play', ids: [104, 105, 106, 107, 108], hint: 'select the 3, 4, 5, 6 and 7' }, turn: ME, can_pass: false,
-        anchors: [cards_anchor([104, 105, 106, 107, 108]), ['[data-tut="cheat"]']],
+        anchors: [['[data-tut="cheat"]']], highlight_cards: [104, 105, 106, 107, 108],
     },
     {
         text: 'Everyone passes again. Time to go out: play your pair of 9s, then your last card.',
         expect: { kind: 'play', ids: [102, 103], hint: 'double-tap a 9 to select the pair' }, turn: ME, can_pass: false,
-        anchors: [cards_anchor([102, 103])],
+        highlight_cards: [102, 103],
     },
     {
         text: 'One card left: the wild 2 of hearts. Played alone it counts as a level card, stronger than an ace!',
         expect: { kind: 'play', ids: [113], hint: 'select the gold 2 of hearts' }, turn: ME, can_pass: false,
-        anchors: [cards_anchor([113])],
+        highlight_cards: [113],
     },
     {
         text: 'You finished 1st! Your team climbs levels based on where your partner lands: 1st + 2nd is 3 levels, 1st + 3rd is 2, 1st + 4th is 1. First team to win at level A takes the game.',
@@ -163,17 +162,9 @@ function Spotlights({ anchors }: { anchors: string[][] }) {
                     const el = document.querySelector(sel)
                     if (!el) continue
                     const b = el.getBoundingClientRect()
-                    let visible_right = b.right
-                    if (el instanceof HTMLElement && el.dataset.cardId) {
-                        const next_col = el.parentElement?.nextElementSibling
-                        if (next_col) {
-                            const n = next_col.getBoundingClientRect()
-                            if (n.left > b.left) visible_right = Math.min(visible_right, n.left)
-                        }
-                    }
                     left = Math.min(left, b.left)
                     top = Math.min(top, b.top)
-                    right = Math.max(right, visible_right)
+                    right = Math.max(right, b.right)
                     bottom = Math.max(bottom, b.bottom)
                 }
                 if (left !== Infinity) {
@@ -408,6 +399,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 is_tribute_mode={false}
                 tribute_events={tribute_events}
                 on_leave={on_exit}
+                highlight_ids={current.highlight_cards ? new Set(current.highlight_cards) : undefined}
             />
 
             {current.anchors && <Spotlights key={step} anchors={current.anchors} />}
