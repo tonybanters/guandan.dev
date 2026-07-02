@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Card as Card_Type, Rank, Tribute_Event, get_rank_symbol, Rank_Two, Rank_Ten, Rank_King, Rank_Ace, Rank_Black_Joker, Rank_Red_Joker, is_wild } from '../game/types'
 import { Hand } from './Hand'
 import { Card, CARD_CONFIG } from './Card'
+import { Cheat_Sheet } from './Cheat_Sheet'
 import { use_is_mobile, use_is_short } from '../hooks/use_is_mobile'
 import { get_rank_value } from '../game/combos'
 
@@ -55,6 +56,7 @@ interface Game_Props {
   on_tribute?: () => void
   tribute_events: Tribute_Event[]
   on_leave: () => void
+  highlight_ids?: Set<number>
 }
 
 export function Game({
@@ -79,6 +81,7 @@ export function Game({
   on_tribute,
   tribute_events,
   on_leave,
+  highlight_ids,
 }: Game_Props) {
   const is_my_turn = current_turn === my_seat
   const relative_positions = get_relative_positions(my_seat)
@@ -134,7 +137,7 @@ export function Game({
     <div style={is_mobile ? mobile_styles.container : styles.container}>
       {/* Info bar */}
       <div style={is_mobile ? mobile_styles.info_bar : styles.info_bar}>
-        <div style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
+        <div data-tut="level" style={is_mobile ? mobile_styles.level_badge : styles.level_badge}>
           Lvl: {get_rank_symbol(level)}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: is_mobile ? 8 : 12 }}>
@@ -265,6 +268,7 @@ export function Game({
                   color="#dc3545"
                   on_click={on_pass}
                   is_mobile={is_mobile}
+                  tut_id="pass"
                 />
                 <Action_Button
                   label="Play"
@@ -272,6 +276,7 @@ export function Game({
                   color="#28a745"
                   on_click={on_play}
                   is_mobile={is_mobile}
+                  tut_id="play"
                 />
               </>
             )}
@@ -326,6 +331,7 @@ export function Game({
 
       {/* My area at bottom */}
       <div style={is_mobile ? mobile_styles.my_area : styles.my_area}>
+        <Cheat_Sheet />
         <Hand
           cards={hand}
           level={level}
@@ -335,6 +341,7 @@ export function Game({
           on_select_same_rank={is_tribute_mode ? tribute_select_same_rank : on_select_same_rank}
           on_clear_selection={on_clear_selection}
           is_tribute_mode={is_tribute_mode}
+          highlight_ids={highlight_ids}
         />
 
         {hand.length === 0 && (
@@ -548,11 +555,13 @@ interface Action_Button_Props {
   text_color?: string
   on_click: () => void
   is_mobile: boolean
+  tut_id?: string
 }
 
-function Action_Button({ label, enabled, color, text_color = '#fff', on_click, is_mobile }: Action_Button_Props) {
+function Action_Button({ label, enabled, color, text_color = '#fff', on_click, is_mobile, tut_id }: Action_Button_Props) {
   return (
     <motion.button
+      data-tut={tut_id}
       whileTap={enabled ? { scale: 0.95 } : undefined}
       onClick={on_click}
       disabled={!enabled}
@@ -928,6 +937,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   my_area: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -987,6 +997,7 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   my_area: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
