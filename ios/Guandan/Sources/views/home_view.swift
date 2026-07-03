@@ -22,6 +22,7 @@ struct Home_View: View {
     @AppStorage("guandan_name") private var name = ""
     @State private var join_code = ""
     @State private var show_friends = false
+    @State private var show_tutorial = false
 
     private var trimmed_name: String { name.trimmingCharacters(in: .whitespaces) }
     private var has_name: Bool { !trimmed_name.isEmpty }
@@ -59,6 +60,16 @@ struct Home_View: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokyo.bg)
+        .fullScreenCover(isPresented: $show_tutorial) {
+            Tutorial_View(on_exit: { show_tutorial = false })
+        }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-tutorial") {
+                show_tutorial = true
+            }
+            #endif
+        }
     }
 
     private var queue_view: some View {
@@ -125,6 +136,9 @@ struct Home_View: View {
                     socket.send(.queue_join, Queue_Join_Payload(player_name: trimmed_name))
                     store.in_queue = true
                     store.queue_found = 1
+                }
+                menu_button("How to\nPlay", color: Tokyo.cyan, enabled: true) {
+                    show_tutorial = true
                 }
             }
             if !has_name {

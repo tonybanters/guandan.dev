@@ -124,7 +124,7 @@ struct Hand_View: View {
                     card: card,
                     level: store.level,
                     selected: store.selected_ids.contains(card.id),
-                    glowing: store.received_tribute_id == card.id,
+                    glowing: store.received_tribute_id == card.id || store.highlight_ids.contains(card.id),
                     size: card_size,
                     context: .hand
                 )

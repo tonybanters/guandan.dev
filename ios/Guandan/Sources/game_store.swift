@@ -45,6 +45,11 @@ final class Game_Store {
     private var tribute_event_id = 0
     // card just received via tribute; glows in the hand until play starts
     var received_tribute_id: Int?
+    // cards the tutorial wants the player to look at
+    var highlight_ids: Set<Int> = []
+    // a tutorial store never talks to the network and leaves via its own exit
+    var is_tutorial = false
+    var tutorial_exit: (() -> Void)?
 
     var in_queue = false
     var queue_found = 1

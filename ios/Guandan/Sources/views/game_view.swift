@@ -35,7 +35,7 @@ struct Game_View: View {
         // cards drawing under the home indicator
         .ignoresSafeArea(edges: .bottom)
         .overlay(alignment: .top) {
-            if socket.status != .connected {
+            if socket.status != .connected && !store.is_tutorial {
                 connection_banner
                     .padding(.top, 40)
             }
@@ -92,7 +92,11 @@ struct Game_View: View {
             }
             .font(.caption)
             Button {
-                show_leave_confirm = true
+                if store.is_tutorial {
+                    store.tutorial_exit?()
+                } else {
+                    show_leave_confirm = true
+                }
             } label: {
                 Text("leave")
                     .font(.system(size: 11))

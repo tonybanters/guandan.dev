@@ -19,6 +19,9 @@ final class Game_Socket {
 
     private(set) var status: Status = .closed
     var on_message: ((Incoming_Message) -> Void)?
+    // tutorial hook: outgoing messages are handed to the script instead of
+    // the network so the mock round can react to play and pass taps
+    var send_interceptor: ((Msg_Type, Play_Cards_Payload?) -> Void)?
 
     private let url: URL
     private var task: URLSessionWebSocketTask?
@@ -67,6 +70,10 @@ final class Game_Socket {
     }
 
     func send<T: Encodable>(_ type: Msg_Type, _ payload: T) {
+        if let send_interceptor {
+            send_interceptor(type, payload as? Play_Cards_Payload)
+            return
+        }
         guard let task, let text = try? encode_message(type, payload) else { return }
         Task {
             try? await task.send(.string(text))
