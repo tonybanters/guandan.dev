@@ -8,3 +8,5 @@ client/dist/
 mprocs.log
 ios/GuandanCore/.build/
 ios/Guandan/Guandan.xcodeproj/
+.DS_Store
+ios/GuandanCore/.swiftpm/

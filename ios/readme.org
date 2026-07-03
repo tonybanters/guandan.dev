@@ -44,14 +44,18 @@ after adding files, and keep =Guandan.xcodeproj= out of git.
 
 ** protocol parity todo
 
-the store handles room_state, deal_cards, turn, play_made, reconnect_success,
-and error. still to port from =client/src/App.tsx=:
+the store handles room_state, deal_cards, turn (with new-trick clearing),
+play_made, hand_end, game_end, reconnect_success, error (3s auto-dismiss),
+the full tribute flow (tribute, tribute_return, tribute_recv,
+tribute_give_ok, tribute_return_ok, tribute_paid, tribute_returned,
+kang_gong), queue_status / requeued, and player_disconnected /
+player_reconnected. screens: home (friends / practice / quick match /
+rejoin), lobby (seat picking, ready, fill bots, start, invite link), game
+(tribute ui, banners, leave confirm, cheat sheet), hand (swipe select,
+double-tap rank select, custom piles). still to port from =client/src=:
 
-- hand_end / game_end flow and finish order
-- tribute flow (tribute, tribute_give, tribute_recv, tribute_return,
-  tribute_return_give, tribute_paid, tribute_returned, kang_gong)
-- queue_status / requeued for quick match
-- player_disconnected / player_reconnected banners
-- lobby ui (seat picking, ready, invite links)
-- custom piles and the straight flush helpers from Hand.tsx
+- the interactive tutorial (Tutorial.tsx) and its home entry point
+- deal-in / played-card animations (framer-motion equivalents)
+- straight flush suit helper buttons (disabled in web too)
+- deep links into rooms (guandan.dev/room/:id universal links)
 - apns push for turn notifications (needs paid developer account)

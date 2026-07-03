@@ -14,12 +14,20 @@ targets:
       - Sources
     dependencies:
       - package: GuandanCore
+    info:
+      path: Sources/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIAppFonts:
+          - IosevkaNerdFont-Bold.ttf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.guandan.ios
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: XJLK6U3958
         SWIFT_VERSION: "5"
         TARGETED_DEVICE_FAMILY: "1,2"
