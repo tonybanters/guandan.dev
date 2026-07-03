@@ -6,6 +6,7 @@ import {
     Suit_Spades, Suit_Hearts, Suit_Clubs, Suit_Diamonds,
 } from '../game/types'
 import { use_is_mobile } from '../hooks/use_is_mobile'
+import { tokyo, tokyo_fg_a, tokyo_muted_a, tokyo_yellow_a } from '../theme'
 
 interface Tutorial_Props {
     on_exit: () => void
@@ -199,9 +200,9 @@ function Spotlights({ anchors }: { anchors: string[][] }) {
                         top: r.top - 5,
                         width: r.width + 10,
                         height: r.height + 10,
-                        border: '2px solid #ffc107',
+                        border: `2px solid ${tokyo.yellow}`,
                         borderRadius: 10,
-                        boxShadow: '0 0 14px rgba(255, 193, 7, 0.6)',
+                        boxShadow: `0 0 14px ${tokyo_yellow_a(0.6)}`,
                         pointerEvents: 'none',
                         zIndex: 240,
                     }}
@@ -454,8 +455,8 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 transition={{ duration: 0.2 }}
                 style={{
                     width: is_mobile ? 'min(440px, 92vw)' : 460,
-                    backgroundColor: '#16213e',
-                    border: '1px solid rgba(255, 193, 7, 0.5)',
+                    backgroundColor: tokyo.panel,
+                    border: `1px solid ${tokyo_yellow_a(0.5)}`,
                     borderRadius: 12,
                     padding: is_mobile ? '10px 14px' : '14px 18px',
                     boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
@@ -463,7 +464,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 }}
             >
                 <div style={{
-                    color: '#fff',
+                    color: tokyo.fg,
                     fontSize: is_mobile ? 12 : 14,
                     lineHeight: 1.45,
                 }}>
@@ -472,7 +473,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
 
                 {hint && (
                     <div style={{
-                        color: '#ffc107',
+                        color: tokyo.yellow,
                         fontSize: is_mobile ? 11 : 12,
                         fontWeight: 'bold',
                         marginTop: 6,
@@ -493,15 +494,15 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                             padding: '4px 10px',
                             fontSize: 11,
                             backgroundColor: 'transparent',
-                            color: '#888',
-                            border: '1px solid #555',
+                            color: tokyo.muted,
+                            border: `1px solid ${tokyo_fg_a(0.2)}`,
                             borderRadius: 6,
                             cursor: 'pointer',
                         }}
                     >
                         Skip tutorial
                     </button>
-                    <span style={{ color: '#666', fontSize: 11 }}>
+                    <span style={{ color: tokyo_muted_a(0.7), fontSize: 11 }}>
                         {step + 1}/{STEPS.length}
                     </span>
                     {current.expect === null ? (
@@ -511,8 +512,8 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                                 padding: '6px 18px',
                                 fontSize: 13,
                                 fontWeight: 'bold',
-                                backgroundColor: '#28a745',
-                                color: '#fff',
+                                backgroundColor: tokyo.green,
+                                color: tokyo.bg,
                                 border: 'none',
                                 borderRadius: 6,
                                 cursor: 'pointer',
@@ -522,7 +523,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                         </button>
                     ) : (
                         <span style={{
-                            color: '#ffc107',
+                            color: tokyo.yellow,
                             fontSize: 11,
                             fontWeight: 'bold',
                         }}>

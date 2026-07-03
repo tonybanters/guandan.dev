@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { use_is_mobile } from '../hooks/use_is_mobile'
+import { tokyo, tokyo_fg_a, tokyo_muted_a, tokyo_green_a } from '../theme'
 
 const NAME_KEY = 'guandan_name'
 
@@ -72,7 +73,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                     <motion.div
                         animate={{ opacity: [1, 0.4, 1] }}
                         transition={{ repeat: Infinity, duration: 1.6 }}
-                        style={{ color: '#7ec8e3', fontSize: 18, fontWeight: 'bold' }}
+                        style={{ color: tokyo.cyan, fontSize: 18, fontWeight: 'bold' }}
                     >
                         Searching for players… {queue_found}/4
                     </motion.div>
@@ -81,7 +82,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.97 }}
                         onClick={on_cancel_queue}
-                        style={{ ...styles.menu_button, backgroundColor: '#6c757d' }}
+                        style={{ ...styles.menu_button, backgroundColor: tokyo_fg_a(0.12), color: tokyo.muted }}
                     >
                         Cancel
                     </motion.button>
@@ -118,10 +119,10 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                     >
                         <div style={styles.rejoin_text}>Game in progress in room {session_room_id}</div>
                         <div style={styles.rejoin_buttons}>
-                            <button onClick={on_rejoin} style={{ ...styles.small_button, backgroundColor: '#28a745' }}>
+                            <button onClick={on_rejoin} style={{ ...styles.small_button, backgroundColor: tokyo.green }}>
                                 Rejoin
                             </button>
-                            <button onClick={on_discard_session} style={{ ...styles.small_button, backgroundColor: '#6c757d' }}>
+                            <button onClick={on_discard_session} style={{ ...styles.small_button, backgroundColor: tokyo_fg_a(0.12), color: tokyo.muted }}>
                                 Discard
                             </button>
                         </div>
@@ -137,7 +138,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                         onClick={handle_join_pending}
                         style={{
                             ...styles.menu_button,
-                            backgroundColor: '#28a745',
+                            backgroundColor: tokyo.green,
                             ...(has_name ? {} : disabled_style),
                         }}
                     >
@@ -161,7 +162,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                             onClick={() => { if (has_name) on_practice(name.trim()) }}
                             style={{
                                 ...styles.menu_button,
-                                backgroundColor: '#ff9800',
+                                backgroundColor: tokyo.yellow,
                                 ...(has_name ? {} : disabled_style),
                             }}
                         >
@@ -173,7 +174,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                             onClick={() => { if (has_name) on_quick_match(name.trim()) }}
                             style={{
                                 ...styles.menu_button,
-                                backgroundColor: '#9c27b0',
+                                backgroundColor: tokyo.magenta,
                                 ...(has_name ? {} : disabled_style),
                             }}
                         >
@@ -183,7 +184,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={on_tutorial}
-                            style={{ ...styles.menu_button, backgroundColor: '#17a2b8' }}
+                            style={{ ...styles.menu_button, backgroundColor: tokyo.cyan }}
                         >
                             How to Play
                         </motion.button>
@@ -216,7 +217,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                                 onClick={handle_join_code}
                                 style={{
                                     ...styles.small_button,
-                                    backgroundColor: '#28a745',
+                                    backgroundColor: tokyo.green,
                                     ...(join_code.trim() ? {} : disabled_style),
                                 }}
                             >
@@ -227,7 +228,7 @@ export function Home({ pending_room_id, session_room_id, on_rejoin, on_discard_s
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => set_view('menu')}
-                            style={{ ...styles.menu_button, backgroundColor: '#6c757d' }}
+                            style={{ ...styles.menu_button, backgroundColor: tokyo_fg_a(0.12), color: tokyo.muted }}
                         >
                             Back
                         </motion.button>
@@ -245,13 +246,14 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         alignItems: 'center',
         height: '100dvh',
         overflowY: 'auto',
-        backgroundColor: '#1a1a2e',
+        backgroundColor: tokyo.bg,
     },
     card: {
         display: 'flex',
         flexDirection: 'column' as const,
         gap: 12,
-        backgroundColor: '#16213e',
+        backgroundColor: tokyo.panel,
+        border: `1px solid ${tokyo_fg_a(0.08)}`,
         padding: 40,
         borderRadius: 16,
         textAlign: 'center',
@@ -263,20 +265,20 @@ const desktop_styles: Record<string, React.CSSProperties> = {
     logo: {
         fontSize: 64,
         margin: 0,
-        color: '#fff',
+        color: tokyo.fg,
     },
     title: {
-        color: '#fff',
+        color: tokyo.fg,
         marginTop: 0,
         marginBottom: 12,
     },
     input: {
         padding: '12px 16px',
         fontSize: 16,
-        border: '2px solid #333',
+        border: `2px solid ${tokyo_fg_a(0.15)}`,
         borderRadius: 8,
-        backgroundColor: '#0f3460',
-        color: '#fff',
+        backgroundColor: tokyo.bg,
+        color: tokyo.fg,
         outline: 'none',
         textAlign: 'center',
     },
@@ -286,8 +288,8 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         fontWeight: 'bold',
         border: 'none',
         borderRadius: 8,
-        backgroundColor: '#007bff',
-        color: '#fff',
+        backgroundColor: tokyo.blue,
+        color: tokyo.bg,
         cursor: 'pointer',
         width: '100%',
     },
@@ -296,7 +298,7 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         fontSize: 14,
         border: 'none',
         borderRadius: 8,
-        color: '#fff',
+        color: tokyo.bg,
         cursor: 'pointer',
     },
     join_row: {
@@ -305,8 +307,8 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         alignItems: 'stretch',
     },
     rejoin_banner: {
-        backgroundColor: 'rgba(40, 167, 69, 0.12)',
-        border: '1px solid #28a745',
+        backgroundColor: tokyo_green_a(0.1),
+        border: `1px solid ${tokyo_green_a(0.6)}`,
         borderRadius: 8,
         padding: 12,
         display: 'flex',
@@ -314,7 +316,7 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         gap: 8,
     },
     rejoin_text: {
-        color: '#7bd88a',
+        color: tokyo.green,
         fontSize: 14,
     },
     rejoin_buttons: {
@@ -323,7 +325,7 @@ const desktop_styles: Record<string, React.CSSProperties> = {
         justifyContent: 'center',
     },
     hint: {
-        color: '#666',
+        color: tokyo_muted_a(0.7),
         fontSize: 12,
         margin: 0,
     },
@@ -334,7 +336,8 @@ const mobile_styles: Record<string, React.CSSProperties> = {
         display: 'flex',
         flexDirection: 'column' as const,
         gap: 8,
-        backgroundColor: '#16213e',
+        backgroundColor: tokyo.panel,
+        border: `1px solid ${tokyo_fg_a(0.08)}`,
         padding: '14px 18px',
         borderRadius: 12,
         textAlign: 'center',
@@ -346,10 +349,10 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     logo: {
         fontSize: 28,
         margin: 0,
-        color: '#fff',
+        color: tokyo.fg,
     },
     title: {
-        color: '#fff',
+        color: tokyo.fg,
         fontSize: 16,
         marginTop: 0,
         marginBottom: 4,
@@ -357,10 +360,10 @@ const mobile_styles: Record<string, React.CSSProperties> = {
     input: {
         padding: '8px 12px',
         fontSize: 16,
-        border: '2px solid #333',
+        border: `2px solid ${tokyo_fg_a(0.15)}`,
         borderRadius: 8,
-        backgroundColor: '#0f3460',
-        color: '#fff',
+        backgroundColor: tokyo.bg,
+        color: tokyo.fg,
         outline: 'none',
         textAlign: 'center',
     },
@@ -370,14 +373,14 @@ const mobile_styles: Record<string, React.CSSProperties> = {
         fontWeight: 'bold',
         border: 'none',
         borderRadius: 8,
-        backgroundColor: '#007bff',
-        color: '#fff',
+        backgroundColor: tokyo.blue,
+        color: tokyo.bg,
         cursor: 'pointer',
         width: '100%',
     },
     rejoin_banner: {
-        backgroundColor: 'rgba(40, 167, 69, 0.12)',
-        border: '1px solid #28a745',
+        backgroundColor: tokyo_green_a(0.1),
+        border: `1px solid ${tokyo_green_a(0.6)}`,
         borderRadius: 8,
         padding: 8,
         display: 'flex',
@@ -385,7 +388,7 @@ const mobile_styles: Record<string, React.CSSProperties> = {
         gap: 6,
     },
     rejoin_text: {
-        color: '#7bd88a',
+        color: tokyo.green,
         fontSize: 12,
     },
 }
