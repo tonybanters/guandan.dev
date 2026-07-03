@@ -10,31 +10,30 @@ private func c(_ id: Int, _ rank: Rank, _ suit: Suit) -> Card {
     Card(suit: suit, rank: rank, id: id)
 }
 
-// the web tutorial dealt jacks here but narrated them as 9s; actual 9s make
-// the "cannot beat the pair of 10s" lesson true
 private let starting_hand: [Card] = [
     c(101, Rank_Ten, Suit_Clubs),
     c(102, Rank_Nine, Suit_Spades),
     c(103, Rank_Nine, Suit_Diamonds),
-    c(104, Rank_Three, Suit_Diamonds),
-    c(105, Rank_Four, Suit_Spades),
-    c(106, Rank_Five, Suit_Hearts),
-    c(107, Rank_Six, Suit_Clubs),
-    c(108, Rank_Seven, Suit_Diamonds),
-    c(109, Rank_Eight, Suit_Spades),
-    c(110, Rank_Eight, Suit_Hearts),
-    c(111, Rank_Eight, Suit_Diamonds),
-    c(112, Rank_Eight, Suit_Clubs),
-    c(113, Rank_Two, Suit_Hearts),
+    c(104, Rank_Nine, Suit_Clubs),
+    c(105, Rank_Three, Suit_Diamonds),
+    c(106, Rank_Four, Suit_Spades),
+    c(107, Rank_Five, Suit_Hearts),
+    c(108, Rank_Six, Suit_Clubs),
+    c(109, Rank_Seven, Suit_Diamonds),
+    c(110, Rank_Eight, Suit_Spades),
+    c(111, Rank_Eight, Suit_Hearts),
+    c(112, Rank_Eight, Suit_Diamonds),
+    c(113, Rank_Eight, Suit_Clubs),
+    c(114, Rank_Two, Suit_Hearts),
 ]
 
 private let west_queen = [c(201, Rank_Queen, Suit_Clubs)]
 private let partner_ace = [c(202, Rank_Ace, Suit_Spades)]
-private let partner_fours = [c(203, Rank_Four, Suit_Hearts), c(204, Rank_Four, Suit_Clubs)]
-private let east_tens = [c(205, Rank_Ten, Suit_Spades), c(206, Rank_Ten, Suit_Hearts)]
-private let east_straight = [
-    c(211, Rank_Four, Suit_Clubs), c(212, Rank_Five, Suit_Spades), c(213, Rank_Six, Suit_Hearts),
-    c(214, Rank_Seven, Suit_Clubs), c(215, Rank_Eight, Suit_Diamonds),
+private let partner_fours = [c(203, Rank_Four, Suit_Hearts), c(204, Rank_Four, Suit_Clubs), c(205, Rank_Four, Suit_Diamonds)]
+private let east_tens = [c(206, Rank_Ten, Suit_Spades), c(207, Rank_Ten, Suit_Hearts), c(208, Rank_Ten, Suit_Diamonds)]
+private let east_full_house = [
+    c(211, Rank_King, Suit_Spades), c(212, Rank_King, Suit_Hearts), c(213, Rank_King, Suit_Clubs),
+    c(214, Rank_Six, Suit_Spades), c(215, Rank_Six, Suit_Diamonds),
 ]
 private let tribute_pay = c(220, Rank_King, Suit_Diamonds)
 private let tribute_return = c(221, Rank_Five, Suit_Diamonds)
@@ -54,25 +53,23 @@ private struct Tut_Step {
 
 private let steps: [Tut_Step] = [
     Tut_Step(text: "Welcome to Guan Dan! You and your partner (top) play as a team against West and East. Be the first team to empty your hands."),
-    Tut_Step(text: "The badge in the top left shows the level, this hand's trump rank. Level cards beat aces. Your gold 2 of HEARTS is wild: it can stand in for almost any card.", highlight: [113]),
+    Tut_Step(text: "The badge in the top left shows the level, this hand's trump rank. Level cards beat aces. Your gold 2 of HEARTS is wild: it can stand in for almost any card.", highlight: [114]),
     Tut_Step(text: "The table is empty and it's your turn, so you may lead anything. Tap your 10 of clubs to select it, then hit Play.",
              expect: .play(ids: [101], hint: "select just the 10 of clubs"), turn: me, highlight: [101]),
     Tut_Step(text: "West beat your 10 with a queen. To play on someone you must beat their play with the SAME combo type, or pass.", turn: me),
     Tut_Step(text: "Beating the queen would waste your good cards. Sometimes passing is right. Hit Pass.",
              expect: .pass, turn: me, can_pass: true),
     Tut_Step(text: "Your partner took the trick with an ace and East passed. When everyone passes, the trick ends and its winner leads the next one.", turn: partner),
-    Tut_Step(text: "Partner leads a pair of 4s. Pairs can only be beaten by higher pairs (or bombs). East plays a pair of 10s...", turn: east),
-    Tut_Step(text: "Your pair of 9s cannot beat the 10s. Your partner loses this trick, but hold your strong cards for the right moment. Pass for now.",
+    Tut_Step(text: "Partner leads three 4s, a triple. Triples can only be beaten by higher triples (or bombs). East plays three 10s...", turn: east),
+    Tut_Step(text: "You cannot beat three 10s with your three 9s. No problem, just pass for now and save them.",
              expect: .pass, turn: me, can_pass: true),
-    Tut_Step(text: "East won the trick with the 10s and leads next. East plays a straight: five consecutive ranks. Only a higher straight or a bomb beats it.", turn: me),
-    Tut_Step(text: "You have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s (or long press the stack) to grab all four, then Play.",
-             expect: .play(ids: [109, 110, 111, 112], hint: "double-tap or long press an 8 to select all four"), turn: me, highlight: [109, 110, 111, 112]),
-    Tut_Step(text: "Boom. Nobody can answer a bomb that big, so you lead again. Now play your own straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? combos button, bottom left.",
-             expect: .play(ids: [104, 105, 106, 107, 108], hint: "select the 3, 4, 5, 6 and 7"), turn: me, highlight: [104, 105, 106, 107, 108]),
-    Tut_Step(text: "Everyone passes again. Time to go out: play your pair of 9s, then your last card.",
-             expect: .play(ids: [102, 103], hint: "double-tap a 9 to select the pair"), turn: me, highlight: [102, 103]),
-    Tut_Step(text: "One card left: the wild 2 of hearts. Played alone it counts as a level card, stronger than an ace!",
-             expect: .play(ids: [113], hint: "select the gold 2 of hearts"), turn: me, highlight: [113]),
+    Tut_Step(text: "East won the trick and leads a full house: a triple plus a pair. You have no full house to answer with...", turn: me),
+    Tut_Step(text: "...but you have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s (or long press the stack) to grab all four, then Play.",
+             expect: .play(ids: [110, 111, 112, 113], hint: "double-tap or long press an 8 to select all four"), turn: me, highlight: [110, 111, 112, 113]),
+    Tut_Step(text: "Boom. Nobody can answer a bomb that big, so you lead again. Now play a straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? combos button, bottom left.",
+             expect: .play(ids: [105, 106, 107, 108, 109], hint: "select the 3, 4, 5, 6 and 7"), turn: me, highlight: [105, 106, 107, 108, 109]),
+    Tut_Step(text: "Everyone passes again. Time to go out in style: your wild 2 of HEARTS can stand in for a fourth 9. Select your three 9s and the wild 2 to play them as a BOMB.",
+             expect: .play(ids: [102, 103, 104, 114], hint: "select all three 9s and the gold 2 of hearts"), turn: me, highlight: [102, 103, 104, 114]),
     Tut_Step(text: "You finished 1st! Your team climbs levels based on where your partner lands: 1st + 2nd is 3 levels, 1st + 3rd is 2, 1st + 4th is 1. First team to win at level A takes the game.", turn: west),
     Tut_Step(text: "One more thing: TRIBUTE. Next hand, last place pays their best card to the winner, who returns any card of 10 or lower. It shows in the top left like this.", turn: west),
     Tut_Step(text: "That's the core of Guan Dan. Check ? combos for tubes, plates, straight flushes and the joker bomb. Good luck!"),
@@ -105,7 +102,7 @@ private final class Tutorial_Driver {
         store.level = Rank_Two
         store.my_seat = me
         store.hand = sort_cards(starting_hand, level: Rank_Two)
-        store.player_card_counts = [13, 13, 13, 13]
+        store.player_card_counts = [14, 14, 14, 14]
         store.names_by_seat = [me: "You", west: "West", partner: "Partner", east: "East"]
         store.players = store.names_by_seat.map {
             Player_Info(id: "t\($0.key)", name: $0.value, seat: $0.key, team: $0.key % 2, is_ready: true)
@@ -149,20 +146,20 @@ private final class Tutorial_Driver {
             seat_passes(west, after: 0.6)
             seat_passes(partner, after: 1.2)
             new_trick(after: 2.2)
-            seat_plays(east, east_straight, after: 2.9)
-        case 10, 11, 12:
+            seat_plays(east, east_full_house, after: 2.9)
+        case 10, 11:
             seat_passes(step == 10 ? east : west, after: 0.5)
             seat_passes(step == 10 ? west : partner, after: 1.1)
             seat_passes(step == 10 ? partner : east, after: 1.7)
             new_trick(after: 2.6)
-        case 14:
+        case 13:
             schedule(after: 0.5) { [self] in
                 store.tribute_events = [Tribute_Event(id: 1, kind: .pay, from_seat: east, to_seat: me, card: tribute_pay)]
             }
             schedule(after: 1.7) { [self] in
                 store.tribute_events.append(Tribute_Event(id: 2, kind: .ret, from_seat: me, to_seat: east, card: tribute_return))
             }
-        case 15:
+        case 14:
             store.tribute_events = []
             store.player_plays = [:]
         default:
