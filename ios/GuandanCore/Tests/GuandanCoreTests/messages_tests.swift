@@ -33,6 +33,16 @@ final class Messages_Tests: XCTestCase {
         XCTAssertNil(Incoming_Message(text: #"{"type":"nonsense","payload":{}}"#))
     }
 
+    // the server omits cards/combo_type on passes; Go encodes the nil slice
+    // as null, and the payload must still decode or passes vanish
+    func test_pass_play_made_decodes_null_cards() throws {
+        let json = #"{"type":"play_made","payload":{"player_id":"p2","seat":1,"cards":null,"combo_type":"","is_pass":true}}"#
+        let msg = Incoming_Message(text: json)
+        let payload = try msg!.payload(Play_Made_Payload.self)
+        XCTAssertTrue(payload.is_pass)
+        XCTAssertNil(payload.cards)
+    }
+
     func test_encode_play_cards() throws {
         let text = try encode_message(.play_cards, Play_Cards_Payload(card_ids: [3, 7]))
         XCTAssertTrue(text.contains(#""type":"play_cards""#))

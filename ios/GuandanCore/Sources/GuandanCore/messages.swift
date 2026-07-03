@@ -16,6 +16,8 @@ public enum Msg_Type: String, Codable, Sendable {
     case tribute_recv
     case tribute_return
     case tribute_return_give
+    case tribute_give_ok
+    case tribute_return_ok
     case game_end
     case error
     case player_joined
@@ -144,9 +146,62 @@ public struct Turn_Payload: Codable, Sendable {
 public struct Play_Made_Payload: Codable, Sendable {
     public let player_id: String
     public let seat: Int
-    public let cards: [Card]
-    public let combo_type: String
+    // the server omits cards/combo_type on passes, which Go encodes as
+    // null — a non-optional here makes every pass message fail to decode
+    public let cards: [Card]?
+    public let combo_type: String?
     public let is_pass: Bool
+}
+
+public struct Hand_End_Payload: Codable, Sendable {
+    public let finish_order: [String]
+    public let winning_team: Int
+    public let level_advance: Int
+    public let new_levels: [Int]
+}
+
+public struct Game_End_Payload: Codable, Sendable {
+    public let winning_team: Int
+    public let final_levels: [Int]
+}
+
+public struct Tribute_Payload: Codable, Sendable {
+    public let from_seat: Int
+    public let to_seat: Int
+}
+
+public struct Tribute_Recv_Payload: Codable, Sendable {
+    public let card: Card
+}
+
+public struct Tribute_Return_Payload: Codable, Sendable {
+    public let to_seat: Int
+}
+
+public struct Tribute_Ok_Payload: Codable, Sendable {
+    public let card_id: Int
+}
+
+public struct Tribute_Public_Payload: Codable, Sendable {
+    public let from_seat: Int
+    public let to_seat: Int
+    public let card: Card
+}
+
+public struct Kang_Gong_Payload: Codable, Sendable {
+    public let from_seats: [Int]
+    public let leader: Int
+}
+
+public struct Queue_Status_Payload: Codable, Sendable {
+    public let found: Int
+    public let needed: Int
+}
+
+public struct Player_Status_Payload: Codable, Sendable {
+    public let player_id: String
+    public let seat: Int
+    public let name: String
 }
 
 public struct Error_Payload: Codable, Sendable {
@@ -159,12 +214,12 @@ public struct Reconnect_Success_Payload: Codable, Sendable {
     public let players: [Player_Info]
     public let your_id: String
     public let seat: Int
-    public let cards: [Card]
+    public let cards: [Card]?
     public let level: Rank
     public let current_turn: Int
     public let can_pass: Bool
-    public let table_cards: [Card]
-    public let combo_type: String
+    public let table_cards: [Card]?
+    public let combo_type: String?
     public let card_counts: [Int]
     public let team_levels: [Int]
     public let leading_seat: Int
