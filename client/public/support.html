@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support - Guan Dan, Btw</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; background: #1a1b26; color: #c0caf5; max-width: 640px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; }
+  h1 { color: #7aa2f7; }
+  a { color: #7dcfff; }
+  label { display: block; margin: 18px 0 6px; color: #a9b1d6; font-size: 14px; }
+  input, textarea {
+    width: 100%; box-sizing: border-box; padding: 10px 12px;
+    background: #15161e; color: #c0caf5; border: 1px solid #3b4261;
+    border-radius: 8px; font-size: 15px; font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: #7aa2f7; }
+  textarea { min-height: 160px; resize: vertical; }
+  .buttons { display: flex; gap: 10px; margin-top: 20px; }
+  button {
+    padding: 10px 24px; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .submit { background: #7aa2f7; color: #1a1b26; }
+  .cancel { background: #2a2f45; color: #a9b1d6; }
+  .hint { font-size: 13px; color: #565f89; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>Support</h1>
+<p>Questions, bug reports, or feedback about Guan Dan, Btw? Send a message.</p>
+
+<label for="subject">Subject</label>
+<input id="subject" type="text" placeholder="What's going on?">
+
+<label for="body">What's your issue?</label>
+<textarea id="body" placeholder="Describe the problem, and mention whether you were on the iOS app or the website."></textarea>
+
+<div class="buttons">
+  <button class="submit" onclick="send()">Submit</button>
+  <button class="cancel" onclick="cancel()">Cancel</button>
+</div>
+<p class="hint">Submit opens your mail app with the message addressed to
+tony@tonybtw.com. Or just email directly:
+<a href="mailto:tony@tonybtw.com">tony@tonybtw.com</a></p>
+
+<p><a href="https://guandan.dev">Back to the game</a></p>
+
+<script>
+function send() {
+  const subject = document.getElementById('subject').value.trim() || 'Guan Dan support';
+  const body = document.getElementById('body').value;
+  location.href = 'mailto:tony@tonybtw.com?subject=' +
+    encodeURIComponent('[guandan] ' + subject) +
+    '&body=' + encodeURIComponent(body);
+}
+function cancel() {
+  document.getElementById('subject').value = '';
+  document.getElementById('body').value = '';
+  location.href = 'https://guandan.dev';
+}
+</script>
+</body>
+</html>

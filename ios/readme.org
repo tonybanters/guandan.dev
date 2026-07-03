@@ -1,0 +1,61 @@
+* ios client
+
+native swiftui client for guandan.dev. the go server stays authoritative;
+this is a second client speaking the same websocket protocol as client/.
+
+** layout
+
+- =GuandanCore/= :: plain swift package, no ui. types, combo detection, and
+  message payloads ported from =client/src/game/=. builds and tests on linux
+  or mac.
+- =Guandan/= :: the ios app target. swiftui views, websocket client,
+  observable game store. needs xcode.
+
+** working on linux (logic only)
+
+#+begin_src sh
+just ios-build   # compile GuandanCore (nix swift toolchain)
+just ios-test    # run tests (podman, official swift image)
+#+end_src
+
+the nixpkgs swift toolchain compiles the package but ships without
+libIndexStore.so, which swiftpm test discovery needs, so tests run in the
+official swift container via podman instead.
+
+** working on the mac
+
+one-time setup:
+
+1. install xcode from the app store, then =xcode-select --install=
+2. =brew install xcodegen=
+3. =cd ios/Guandan && xcodegen generate=
+4. =open Guandan.xcodeproj=
+
+daily loop:
+
+- view work: edit in xcode, use =#Preview= canvas for live reload
+- logic work: any editor, sourcekit-lsp ships with the toolchain
+- run: cmd-r to simulator; pick your plugged-in phone as destination for
+  device installs (free apple id signs for 7 days)
+- core tests: =cd ios/GuandanCore && swift test=
+
+the project file is generated from =project.yml=; rerun =xcodegen generate=
+after adding files, and keep =Guandan.xcodeproj= out of git.
+
+** protocol parity todo
+
+the store handles room_state, deal_cards, turn (with new-trick clearing),
+play_made, hand_end, game_end, reconnect_success, error (3s auto-dismiss),
+the full tribute flow (tribute, tribute_return, tribute_recv,
+tribute_give_ok, tribute_return_ok, tribute_paid, tribute_returned,
+kang_gong), queue_status / requeued, and player_disconnected /
+player_reconnected. screens: home (friends / practice / quick match /
+rejoin), lobby (seat picking, ready, fill bots, start, invite link), game
+(tribute ui, banners, leave confirm, cheat sheet), hand (swipe select,
+double-tap rank select, custom piles). still to port from =client/src=:
+
+- the interactive tutorial (Tutorial.tsx) and its home entry point
+- deal-in / played-card animations (framer-motion equivalents)
+- straight flush suit helper buttons (disabled in web too)
+- deep links into rooms (guandan.dev/room/:id universal links)
+- apns push for turn notifications (needs paid developer account)
