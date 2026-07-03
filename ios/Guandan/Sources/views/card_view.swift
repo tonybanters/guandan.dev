@@ -31,11 +31,11 @@ struct Card_Config {
 func card_config(_ context: Card_Context, _ size: Card_Size) -> Card_Config {
     switch (context, size) {
     case (.hand, .tiny):
-        return Card_Config(width: 54, height: 81, rank_font: 18, suit_font: 11, center_font: 36, center_x: 0.66, center_y: 0.60, h_visible: 38, v_overlap: 28)
+        return Card_Config(width: 54, height: 81, rank_font: 18, suit_font: 11, center_font: 36, center_x: 0.66, center_y: 0.60, h_visible: 38, v_overlap: 24)
     case (.hand, .small):
-        return Card_Config(width: 62, height: 93, rank_font: 21, suit_font: 13, center_font: 42, center_x: 0.66, center_y: 0.60, h_visible: 44, v_overlap: 32)
+        return Card_Config(width: 62, height: 93, rank_font: 21, suit_font: 13, center_font: 42, center_x: 0.66, center_y: 0.60, h_visible: 44, v_overlap: 28)
     case (.hand, .normal):
-        return Card_Config(width: 76, height: 114, rank_font: 26, suit_font: 16, center_font: 52, center_x: 0.66, center_y: 0.60, h_visible: 52, v_overlap: 38)
+        return Card_Config(width: 76, height: 114, rank_font: 26, suit_font: 16, center_font: 52, center_x: 0.66, center_y: 0.60, h_visible: 52, v_overlap: 34)
     case (.table, .tiny):
         return Card_Config(width: 42, height: 63, rank_font: 17, suit_font: 12, center_font: 18, center_x: 0.68, center_y: 0.58, h_visible: 24, v_overlap: 0)
     case (.table, .small):
@@ -105,17 +105,26 @@ struct Card_View: View {
         )
     }
 
-    // rank over suit like the reference app, so an overlap strip shows both.
-    // fixed-height boxes emulate line-height 1, keeping the two fonts from
-    // floating on their own metrics.
+    // hand cards read rank then suit in a row so a stacked strip shows both;
+    // table cards stack the suit under the rank. fixed-height boxes emulate
+    // line-height 1, keeping the two fonts from floating on their own metrics.
+    @ViewBuilder
     private var corner_label: some View {
-        VStack(alignment: .center, spacing: 0) {
-            tight_text(is_joker ? "王" : get_rank_symbol(card.rank), font: .custom(card_font_name, size: cfg.rank_font), box: cfg.rank_font)
-            if !is_joker {
-                tight_text(get_suit_symbol(card.suit), font: .system(size: cfg.suit_font), box: cfg.suit_font)
+        let rank = tight_text(is_joker ? "王" : get_rank_symbol(card.rank), font: .custom(card_font_name, size: cfg.rank_font), box: cfg.rank_font)
+        let suit = tight_text(get_suit_symbol(card.suit), font: .system(size: cfg.suit_font), box: cfg.suit_font)
+        if context == .hand {
+            HStack(alignment: .center, spacing: 2) {
+                rank
+                if !is_joker { suit }
             }
+            .foregroundStyle(ink)
+        } else {
+            VStack(alignment: .center, spacing: 0) {
+                rank
+                if !is_joker { suit }
+            }
+            .foregroundStyle(ink)
         }
-        .foregroundStyle(ink)
     }
 
     private func tight_text(_ s: String, font: Font, box: CGFloat) -> some View {
