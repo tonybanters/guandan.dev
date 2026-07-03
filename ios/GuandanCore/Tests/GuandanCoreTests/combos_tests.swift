@@ -128,7 +128,15 @@ final class Combos_Tests: XCTestCase {
 
     func test_level_card_value() {
         XCTAssertEqual(get_rank_value(Rank_Seven, level: Rank_Seven), 98)
-        XCTAssertEqual(get_rank_value(Rank_Two, level: Rank_Seven), 15)
         XCTAssertEqual(get_rank_value(Rank_Ace, level: Rank_Seven), 14)
+        // 2 is the lowest natural rank, matching the server's ordering
+        XCTAssertLessThan(
+            get_rank_value(Rank_Two, level: Rank_Seven),
+            get_rank_value(Rank_Three, level: Rank_Seven)
+        )
+        XCTAssertLessThan(
+            get_rank_value(Rank_Two, level: Rank_Seven),
+            get_rank_value(Rank_Ace, level: Rank_Seven)
+        )
     }
 }

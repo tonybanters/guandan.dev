@@ -162,7 +162,10 @@ public func get_rank_value(_ rank: Rank, level: Rank) -> Int {
     if rank == Rank_Red_Joker { return 100 }
     if rank == Rank_Black_Joker { return 99 }
     if rank == level { return 98 }
-    if rank == Rank_Two { return 15 }
+    // 2 is the lowest natural rank, matching the server's rank_value
+    // (2=0..A=12). the web client's copy still ranks 2 above the ace,
+    // which makes its tribute validation demand the wrong card.
+    if rank == Rank_Two { return 2 }
     if rank == Rank_Ace { return 14 }
     return rank + 2
 }
