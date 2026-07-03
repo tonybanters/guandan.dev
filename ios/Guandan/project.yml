@@ -23,6 +23,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIAppFonts:
           - IosevkaNerdFont-Bold.ttf
+        CFBundleDisplayName: Guan Dan
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.guandan.ios
