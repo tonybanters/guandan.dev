@@ -5,14 +5,36 @@ import GuandanCore
 struct Guandan_App: App {
     @State private var store = Game_Store()
     @State private var socket = Game_Socket()
+    @Environment(\.scenePhase) private var scene_phase
 
     var body: some Scene {
         WindowGroup {
             Content_View(socket: socket)
                 .environment(store)
+                .onChange(of: scene_phase) { _, phase in
+                    // ios kills the socket in the background and the retry
+                    // loop gives up; coming back to the foreground must
+                    // always get a fresh connection attempt
+                    if phase == .active {
+                        socket.wake()
+                    }
+                }
                 .onAppear {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("-mock_game") {
+                        store.load_mock_game()
+                        return
+                    }
+                    #endif
                     socket.on_message = { msg in
                         store.handle(msg)
+                        // a freshly created practice room fills with bots and
+                        // starts immediately, mirroring the web client; scoped
+                        // to room_state so no other message can trip it
+                        if msg.type == .room_state, store.consume_practice_start() {
+                            socket.send(.fill_bots)
+                            socket.send(.start_game)
+                        }
                     }
                     socket.connect()
                 }
@@ -25,80 +47,28 @@ struct Content_View: View {
     let socket: Game_Socket
 
     var body: some View {
-        if store.game_active {
-            Game_View(socket: socket)
-        } else {
-            Home_View(socket: socket)
+        Group {
+            if store.game_active {
+                Game_View(socket: socket)
+            } else if store.room_id != nil {
+                Lobby_View(socket: socket)
+            } else {
+                Home_View(socket: socket)
+            }
         }
-    }
-}
-
-struct Home_View: View {
-    @Environment(Game_Store.self) private var store
-    let socket: Game_Socket
-
-    @State private var name = ""
-    @State private var practice_pending = false
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("guandan")
-                .font(.system(size: 36, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
-
-            TextField("your name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 240)
-
-            Button("practice vs bots") {
-                practice_pending = true
-                socket.send(.create_room, Create_Room_Payload(player_name: name))
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(name.isEmpty)
-
-            Button("quick match") {
-                socket.send(.queue_join, Queue_Join_Payload(player_name: name))
-            }
-            .buttonStyle(.bordered)
-            .tint(.white)
-            .disabled(name.isEmpty)
-
-            if socket.saved_session != nil {
-                Button("rejoin last game") {
-                    socket.try_reconnect()
-                }
-                .buttonStyle(.bordered)
-                .tint(.yellow)
-            }
-
-            Text(status_text)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
-
+        .overlay(alignment: .bottom) {
             if let error = store.last_error {
                 Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Color(red: 0.86, green: 0.21, blue: 0.27), in: RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                    .padding(.bottom, 20)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.06, green: 0.2, blue: 0.38))
-        .onChange(of: store.room_id) { _, new_value in
-            if practice_pending && new_value != nil {
-                socket.send(.fill_bots)
-                socket.send(.start_game)
-                practice_pending = false
-            }
-        }
-    }
-
-    private var status_text: String {
-        switch socket.status {
-        case .closed: return "disconnected"
-        case .connecting: return "connecting..."
-        case .connected: return "connected to guandan.dev"
-        case .reconnecting: return "reconnecting..."
-        }
+        .animation(.easeOut(duration: 0.2), value: store.last_error)
     }
 }
