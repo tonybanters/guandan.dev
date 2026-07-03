@@ -21,27 +21,28 @@ const card = (id: number, rank: Rank, suit: Suit): Card_Type => ({ Id: id, Rank:
 
 const STARTING_HAND: Card_Type[] = [
     card(101, 8, Suit_Clubs),
-    card(102, 9, Suit_Spades),
-    card(103, 9, Suit_Diamonds),
-    card(104, 1, Suit_Diamonds),
-    card(105, 2, Suit_Spades),
-    card(106, 3, Suit_Hearts),
-    card(107, 4, Suit_Clubs),
-    card(108, 5, Suit_Diamonds),
-    card(109, 6, Suit_Spades),
-    card(110, 6, Suit_Hearts),
-    card(111, 6, Suit_Diamonds),
-    card(112, 6, Suit_Clubs),
-    card(113, 0, Suit_Hearts),
+    card(102, 7, Suit_Spades),
+    card(103, 7, Suit_Diamonds),
+    card(104, 7, Suit_Clubs),
+    card(105, 1, Suit_Diamonds),
+    card(106, 2, Suit_Spades),
+    card(107, 3, Suit_Hearts),
+    card(108, 4, Suit_Clubs),
+    card(109, 5, Suit_Diamonds),
+    card(110, 6, Suit_Spades),
+    card(111, 6, Suit_Hearts),
+    card(112, 6, Suit_Diamonds),
+    card(113, 6, Suit_Clubs),
+    card(114, 0, Suit_Hearts),
 ]
 
 const WEST_QUEEN = [card(201, 10, Suit_Clubs)]
 const PARTNER_ACE = [card(202, 12, Suit_Spades)]
-const PARTNER_FOURS = [card(203, 2, Suit_Hearts), card(204, 2, Suit_Clubs)]
-const EAST_TENS = [card(205, 8, Suit_Spades), card(206, 8, Suit_Hearts)]
-const EAST_STRAIGHT = [
-    card(211, 2, Suit_Clubs), card(212, 3, Suit_Spades), card(213, 4, Suit_Hearts),
-    card(214, 5, Suit_Clubs), card(215, 6, Suit_Diamonds),
+const PARTNER_FOURS = [card(203, 2, Suit_Hearts), card(204, 2, Suit_Clubs), card(205, 2, Suit_Diamonds)]
+const EAST_TENS = [card(206, 8, Suit_Spades), card(207, 8, Suit_Hearts), card(208, 8, Suit_Diamonds)]
+const EAST_FULL_HOUSE = [
+    card(211, 11, Suit_Spades), card(212, 11, Suit_Hearts), card(213, 11, Suit_Clubs),
+    card(214, 4, Suit_Spades), card(215, 4, Suit_Diamonds),
 ]
 const TRIBUTE_PAY = card(220, 11, Suit_Diamonds)
 const TRIBUTE_RETURN = card(221, 3, Suit_Diamonds)
@@ -69,7 +70,7 @@ const STEPS: Step[] = [
     {
         text: 'The badge in the top left shows the level, this hand\'s trump rank. Level cards beat aces. Your gold 2 of HEARTS is wild: it can stand in for almost any card.',
         expect: null, turn: -1, can_pass: false,
-        anchors: [['[data-tut="level"]']], highlight_cards: [113],
+        anchors: [['[data-tut="level"]']], highlight_cards: [114],
     },
     {
         text: 'The table is empty and it\'s your turn, so you may lead anything. Tap your 10 of clubs to select it, then hit Play.',
@@ -90,37 +91,32 @@ const STEPS: Step[] = [
         expect: null, turn: PARTNER, can_pass: false,
     },
     {
-        text: 'Partner leads a pair of 4s. Pairs can only be beaten by higher pairs (or bombs). East plays a pair of 10s...',
+        text: 'Partner leads three 4s, a triple. Triples can only be beaten by higher triples (or bombs). East plays three 10s...',
         expect: null, turn: EAST, can_pass: false,
     },
     {
-        text: 'Your pair of 9s cannot beat the 10s. Your partner loses this trick, but hold your strong cards for the right moment. Pass for now.',
+        text: 'You cannot beat three 10s with your three 9s. No problem, just pass for now and save them.',
         expect: { kind: 'pass' }, turn: ME, can_pass: true,
         anchors: [['[data-tut="pass"]']],
     },
     {
-        text: 'East won the trick with the 10s and leads next. East plays a straight: five consecutive ranks. Only a higher straight or a bomb beats it.',
+        text: 'East won the trick and leads a full house: a triple plus a pair. You have no full house to answer with...',
         expect: null, turn: ME, can_pass: false,
     },
     {
-        text: 'You have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s to grab all four, then Play.',
-        expect: { kind: 'play', ids: [109, 110, 111, 112], hint: 'double-tap an 8 to select all four' }, turn: ME, can_pass: false,
-        highlight_cards: [109, 110, 111, 112],
+        text: '...but you have FOUR 8s, a bomb! Bombs beat any non-bomb play, no matter the combo type. Double-tap one of your 8s to grab all four, then Play.',
+        expect: { kind: 'play', ids: [110, 111, 112, 113], hint: 'double-tap an 8 to select all four' }, turn: ME, can_pass: false,
+        highlight_cards: [110, 111, 112, 113],
     },
     {
-        text: 'Boom. Nobody can answer a bomb that big, so you lead again. Now play your own straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? Combos button, bottom left.',
-        expect: { kind: 'play', ids: [104, 105, 106, 107, 108], hint: 'select the 3, 4, 5, 6 and 7' }, turn: ME, can_pass: false,
-        anchors: [['[data-tut="cheat"]']], highlight_cards: [104, 105, 106, 107, 108],
+        text: 'Boom. Nobody can answer a bomb that big, so you lead again. Now play a straight: select 3-4-5-6-7 (tap each card or swipe across them) and Play. The full combo list lives under the ? Combos button, bottom left.',
+        expect: { kind: 'play', ids: [105, 106, 107, 108, 109], hint: 'select the 3, 4, 5, 6 and 7' }, turn: ME, can_pass: false,
+        anchors: [['[data-tut="cheat"]']], highlight_cards: [105, 106, 107, 108, 109],
     },
     {
-        text: 'Everyone passes again. Time to go out: play your pair of 9s, then your last card.',
-        expect: { kind: 'play', ids: [102, 103], hint: 'double-tap a 9 to select the pair' }, turn: ME, can_pass: false,
-        highlight_cards: [102, 103],
-    },
-    {
-        text: 'One card left: the wild 2 of hearts. Played alone it counts as a level card, stronger than an ace!',
-        expect: { kind: 'play', ids: [113], hint: 'select the gold 2 of hearts' }, turn: ME, can_pass: false,
-        highlight_cards: [113],
+        text: 'Everyone passes again. Time to go out in style: your wild 2 of HEARTS can stand in for a fourth 9. Select your three 9s and the wild 2 to play them as a BOMB.',
+        expect: { kind: 'play', ids: [102, 103, 104, 114], hint: 'double-tap a 9 to grab all three, then tap the gold 2 of hearts' }, turn: ME, can_pass: false,
+        highlight_cards: [102, 103, 104, 114],
     },
     {
         text: 'You finished 1st! Your team climbs levels based on where your partner lands: 1st + 2nd is 3 levels, 1st + 3rd is 2, 1st + 4th is 1. First team to win at level A takes the game.',
@@ -224,7 +220,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
     const [selected_ids, set_selected_ids] = useState<Set<number>>(new Set())
     const [player_plays, set_player_plays] = useState<Record<number, { cards: Card_Type[], is_pass: boolean }>>({})
     const [leading_seat, set_leading_seat] = useState<number | null>(null)
-    const [counts, set_counts] = useState([13, 13, 13, 13])
+    const [counts, set_counts] = useState([14, 14, 14, 14])
     const [tribute_events, set_tribute_events] = useState<Tribute_Event[]>([])
     const [hint, set_hint] = useState<string | null>(null)
 
@@ -304,10 +300,10 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 seat_plays(EAST, EAST_TENS, 1700)
                 break
             case 8:
-                schedule(() => seat_passes(WEST, 0), 600)
-                schedule(() => seat_passes(PARTNER, 0), 1200)
+                seat_passes(WEST, 600)
+                seat_passes(PARTNER, 1200)
                 new_trick(2200)
-                seat_plays(EAST, EAST_STRAIGHT, 2900)
+                seat_plays(EAST, EAST_FULL_HOUSE, 2900)
                 break
             case 10:
                 seat_passes(EAST, 500)
@@ -321,13 +317,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                 seat_passes(EAST, 1700)
                 new_trick(2600)
                 break
-            case 12:
-                seat_passes(WEST, 500)
-                seat_passes(PARTNER, 1100)
-                seat_passes(EAST, 1700)
-                new_trick(2600)
-                break
-            case 14:
+            case 13:
                 schedule(() => {
                     set_tribute_events([
                         { id: 1, kind: 'pay', from_seat: EAST, to_seat: ME, card: TRIBUTE_PAY },
@@ -340,7 +330,7 @@ export function Tutorial({ on_exit }: Tutorial_Props) {
                     ])
                 }, 1700)
                 break
-            case 15:
+            case 14:
                 set_tribute_events([])
                 set_player_plays({})
                 break
