@@ -37,7 +37,25 @@ final class Game_Socket {
 
     func connect() {
         should_reconnect = true
+        reconnect_attempts = 0
         open()
+    }
+
+    // returning to the foreground: the socket may be dead while status still
+    // says connected (ios froze us mid-connection), so restore a full retry
+    // budget and force a zombie connection to fail now instead of on the
+    // user's next action
+    func wake() {
+        reconnect_attempts = 0
+        should_reconnect = true
+        switch status {
+        case .connected:
+            task?.sendPing { _ in }
+        case .closed:
+            open()
+        case .connecting, .reconnecting:
+            break // an attempt is already in flight
+        }
     }
 
     func close() {
@@ -70,11 +88,33 @@ final class Game_Socket {
         send(.reconnect, Reconnect_Payload(session_token: session.session_token, room_id: session.room_id))
     }
 
+    // single-flight: opening supersedes any previous task and loop, and a
+    // superseded loop must exit without touching shared state — otherwise a
+    // stale loop's failure nils the task a newer healthy connection is using
     private func open() {
+        receive_task?.cancel()
+        task?.cancel(with: .goingAway, reason: nil)
+
         status = reconnect_attempts > 0 ? .reconnecting : .connecting
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
+
+        // the server stays silent until the client speaks, so waiting for a
+        // first message would leave status stuck on connecting; a pong is
+        // proof the handshake completed
+        task.sendPing { [weak self] error in
+            if let error {
+                print("[socket] ping failed: \(error)")
+                return
+            }
+            print("[socket] ping ok — connected")
+            Task { @MainActor in
+                guard let self, self.task === task else { return }
+                self.status = .connected
+                self.reconnect_attempts = 0
+            }
+        }
 
         if let session = saved_session, joined_this_load {
             reconnecting_session = true
@@ -90,6 +130,7 @@ final class Game_Socket {
         do {
             while !Task.isCancelled {
                 let message = try await task.receive()
+                guard self.task === task else { return }
                 status = .connected
                 reconnect_attempts = 0
                 if case .string(let text) = message, let msg = Incoming_Message(text: text) {
@@ -97,13 +138,17 @@ final class Game_Socket {
                 }
             }
         } catch {
+            print("[socket] receive failed: \(error)")
+            guard self.task === task, !Task.isCancelled else { return }
             self.task = nil
             if should_reconnect && reconnect_attempts < max_reconnect_attempts {
                 let delay = min(UInt64(1 << reconnect_attempts), 10)
                 reconnect_attempts += 1
                 status = .reconnecting
                 try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
-                if should_reconnect {
+                // a retry or wake may have opened a fresh connection while
+                // this loop slept; only reopen if nothing superseded it
+                if should_reconnect && self.task == nil {
                     open()
                 }
             } else {
